@@ -9,30 +9,25 @@
 
 > **给 AI 一个专属浏览器。**
 >
-> 独立的 Chrome profile，登录一次永久有效。
-> 与你的主浏览器并行运行，互不干扰。
+> 登录一次，会话永久留存。你的 Chrome，原封不动。
 
-Grasp 是一个本地 MCP Server，通过 Chrome DevTools Protocol 给 AI Agent 完整的浏览器控制权。它为 AI 创建一个专属的 `chrome-grasp` profile——Agent 在那里登录各种服务，会话永久保留，与你自己的 Chrome 完全隔离。
+Grasp 是一个开源 MCP Server，专为浏览器自动化而生。完全本地运行，连接专属的 `chrome-grasp` profile，赋予 AI Agent 完整的浏览器控制能力——导航、交互、感知——零云依赖，不干扰你的个人浏览。
 
 **当前版本：** `v0.1.0`
 
 ---
 
-## Grasp 的定位
+## 设计理念
 
-Grasp 是一个完全开源、纯本地运行的 MCP Server。没有云服务，没有订阅，数据不离开你的设备。
+Agent 应该拥有自己的浏览器。不是借来的会话，不是每次重置的空白标签——而是一个属于它的持久 profile，凭据随使用积累，永不消失。
 
-整个设计围绕一个理念：**AI 应该拥有自己的浏览器，而不是借用你的。**
+`chrome-grasp` 就是那个 profile。Agent 在里面完成登录，会话跨越每一次运行。你的标签页和历史从不被触碰。
 
-`chrome-grasp` 是一个专属于 Agent 的 Chrome profile，与你的个人浏览完全隔离。Agent 在里面登录所需的服务一次，所有会话永久保存。你的标签页、历史记录、扩展一概不涉及。
+三个原则贯穿 Grasp 的设计：
 
-**Grasp 的差异化：**
+**本地，开源。** 全部代码以 MIT 协议开放，运行在你自己的硬件上。没有云后端，没有遥测，不需要账号。Agent 的行为只在你与浏览器之间。
 
-**开源，本地优先。** 全部代码 MIT 协议开放，运行在你自己的机器上。没有云后端，没有遥测，不需要账号。Agent 的操作只在你、Agent 和浏览器之间。
-
-**属于 Agent 的浏览器。** 其他工具借用你的真实浏览器，或者每次新开一个空白的。Grasp 给 Agent 一个它自己的 profile，会话随时间积累——用得越久，能访问的越多。
-
-**Hint Map。** 不把原始 HTML 倒进上下文窗口，而是扫描实时视口，生成极简语义地图：
+**语义感知，而非原始 HTML。** Grasp 扫描实时视口，生成极简的 Hint Map——屏幕上所有可交互元素的稳定、精炼表示：
 
 ```
 [B1] 提交订单      (button, pos:450,320)
@@ -40,86 +35,31 @@ Grasp 是一个完全开源、纯本地运行的 MCP Server。没有云服务，
 [L2] 返回购物车    (link,   pos:200,400)
 ```
 
-ID 通过指纹注册表跨调用保持稳定。Token 消耗比原始 HTML 节省 90%+。
+ID 通过指纹注册表跨调用保持稳定。Token 消耗比原始 HTML 节省 90%+。Agent 像理解一切结构化数据那样理解 UI——通过有意义的语义，而非噪声。
 
-**真实 CDP 事件。** 每次点击都是一条鼠标曲线，每次滚动是一组 wheel 事件序列，每次输入都有逐字符延迟。不是 `element.click()`——是通过 DevTools Protocol 分发的真实输入。
+**真实输入，而非脚本自动化。** 每次点击沿曲线路径划过屏幕。每次滚动以一组 wheel 事件序列抵达。每次按键携带独立的时序。这是通过 Chrome DevTools Protocol 分发的输入——不是 `element.click()`。
 
-对于暴露 `window.__webmcp__` 的页面，Grasp 直接调用其原生工具接口，完全跳过 DOM 解析。对其他所有页面，Hint Map 和真实事件自动接管。Agent 无需关心底层走的是哪条路。
+对于暴露 `window.__webmcp__` 的页面，Grasp 绕过 DOM，直接调用原生工具接口。对其余所有页面，Hint Map 与真实事件接管交互。Agent 无需知晓底层路径的选择。
 
-## 为什么需要 Grasp
-
-今天让 AI 控制浏览器，你只有三条路，每条都有致命问题：
-
-| 方案 | 问题 |
-|:---|:---|
-| 云端无头浏览器（Browserbase、Steel） | 数据上云，没有 Cookie，内网不可达 |
-| 本地 Playwright 新开浏览器 | 每次全新 profile，登录状态全无，SSO/2FA 全部失效 |
-| 页面阅读工具 | 只能读，不能动 |
-
-Grasp 是第四条路：一个持久的、本地的、属于 Agent 的浏览器，每次任务开始时就已经处于登录状态。
-
-## 这个仓库包含什么
-
-Grasp `v0.1.0` 包含：
-- `src/server/` 中注册了 18 个工具的 MCP Server
-- `src/layer1-bridge/` 中的 Chrome 桥接层和自适应执行引擎
-- `src/layer2-perception/` 中的 Hint Map 感知层
-- `src/layer3-action/` 中的真实事件动作层
-- `src/cli/` 中包含 `connect`、`status`、`logs` 命令的 CLI
-- 写入 `~/.grasp/audit.log` 的操作审计日志
-- 拦截高危操作的 Safe Mode
-- 对 Claude Code、Codex、Cursor 的一键自动配置
-- 从零引导所有流程的连接向导 `grasp connect`
-
-## 工作原理
-
-```
-你的 chrome-grasp profile（已登录，会话完整）
-         |
-         | Chrome DevTools Protocol (CDP)
-         |
-    Grasp MCP Server
-         |
-         | MCP stdio
-         |
-    你的 AI Agent（Claude / Codex / Cursor）
-```
-
-**自适应执行引擎** — 每次导航时，Grasp 在 50ms 内探测页面是否支持 WebMCP。支持 `window.__webmcp__` 的页面走原生结构化工具通道，零 DOM 解析，Token 消耗最低。其他页面走 Hint Map + 真实事件通道，兼容所有存量网页。
-
-**Hint Map** — 不把 HTML 源码传给 AI，而是扫描视口内的可交互元素，返回极简语义地图：
-
-```
-[B1] 提交订单      (button, pos:450,320)
-[I1] 优惠码输入框   (input,  pos:450,280)
-[L2] 返回购物车    (link,   pos:200,400)
-```
-
-Token 消耗比原始 HTML 节省 90%+。ID 通过指纹注册表跨调用保持稳定。
-
-**真实事件，不是 JS 注入** — 每次点击都是一条鼠标曲线（15 步，随机落点偏移）。每次滚动是 5 个 CDP wheel 事件，步间随机间隔 20–60ms。每次输入是逐键事件，字符间随机延迟 30–80ms。
+---
 
 ## 安装
 
-### 一行命令（推荐）
+### 一行命令
 
 ```bash
 npx grasp
 ```
 
-这会运行 `grasp connect` 向导：检测 Chrome，以专属 `chrome-grasp` profile 启动，自动配置 AI 客户端。
+检测 Chrome，以 `chrome-grasp` profile 启动，自动配置 AI 客户端。首次运行时打开浏览器——在里面登录 Agent 需要的服务，会话永久保存。
 
-> 首次启动：向导会打开 `chrome-grasp`。在里面登录你的 Agent 需要操作的服务，会话会永久保存在该 profile 中。
-
-### 手动添加到 AI 客户端
-
-#### Claude Code CLI
+### Claude Code
 
 ```bash
 claude mcp add grasp -- npx -y grasp
 ```
 
-#### Claude Desktop / Cursor
+### Claude Desktop / Cursor
 
 ```json
 {
@@ -132,9 +72,7 @@ claude mcp add grasp -- npx -y grasp
 }
 ```
 
-#### Codex CLI
-
-编辑 `~/.codex/config.toml`：
+### Codex CLI
 
 ```toml
 [mcp_servers.grasp]
@@ -143,113 +81,103 @@ command = "npx"
 args    = ["-y", "grasp"]
 ```
 
-### 全局安装
+---
 
-```bash
-npm install -g grasp
-grasp connect
-```
-
-## CLI 命令
+## CLI
 
 | 命令 | 说明 |
 |:---|:---|
 | `grasp` / `grasp connect` | 连接向导——检测 Chrome、启动、配置 AI 客户端 |
-| `grasp status` | Chrome 连接状态、当前标签页、最近操作 |
+| `grasp status` | 连接状态、当前标签页、最近操作 |
 | `grasp logs` | 查看审计日志（`~/.grasp/audit.log`） |
-| `grasp logs --lines 20` | 显示最近 20 条 |
-| `grasp logs --follow` | 实时跟随新操作 |
-| `grasp --version` | 打印版本号 |
-| `grasp --help` | 打印帮助 |
+| `grasp logs --lines 20` | 最近 20 条 |
+| `grasp logs --follow` | 实时跟随 |
 
-## MCP 工具完整列表
+---
 
-### 导航与状态
+## MCP 工具
 
-| 工具 | 说明 |
-|:---|:---|
-| `navigate` | 导航到 URL，自动探测 WebMCP，返回标题和模式 |
-| `get_status` | Chrome 连接状态、当前页面、执行模式 |
-| `get_page_summary` | 页面标题、URL、可见文字（前 2000 字） |
-| `screenshot` | 截取当前视口（返回 base64） |
-
-### 交互操作
+### 导航
 
 | 工具 | 说明 |
 |:---|:---|
-| `get_hint_map` | 扫描视口可交互元素，返回 `[B1]` `[I1]` `[L1]` 语义地图 |
-| `get_form_fields` | 识别表单字段，按 `<form>` 分组，ID 与 hint map 对齐 |
-| `click` | 自然鼠标曲线点击 Hint ID；高危操作自动拦截 |
-| `confirm_click` | 强制点击高危元素（绕过 safe mode） |
-| `type` | 逐键盘事件输入文字，支持 `press_enter` |
-| `hover` | 悬停元素触发下拉菜单或 Tooltip |
-| `scroll` | 真实 wheel 事件滚动（`up` / `down`） |
-| `press_key` | 发送键盘快捷键（`Enter`、`Escape`、`Control+Enter`） |
-| `watch_element` | 监听 CSS 选择器对应元素的 `appears` / `disappears` / `changes` |
+| `navigate` | 导航到 URL，自动探测 WebMCP |
+| `get_status` | 连接状态、当前页面、执行模式 |
+| `get_page_summary` | 标题、URL、可见文字（前 2000 字） |
+| `screenshot` | 截取当前视口（base64） |
 
-### 标签页管理
+### 交互
 
 | 工具 | 说明 |
 |:---|:---|
-| `get_tabs` | 列出所有标签页（序号、标题、URL） |
-| `switch_tab` | 切换到指定序号的标签页 |
+| `get_hint_map` | 扫描视口，返回语义地图 |
+| `get_form_fields` | 识别表单字段，ID 与 hint map 对齐 |
+| `click` | 按 Hint ID 点击；高危操作自动拦截 |
+| `confirm_click` | 强制点击高危元素 |
+| `type` | 逐键盘事件输入文字 |
+| `hover` | 悬停触发下拉菜单或 Tooltip |
+| `scroll` | 真实 wheel 事件滚动 |
+| `press_key` | 发送键盘快捷键 |
+| `watch_element` | 监听 CSS 选择器对应元素的 DOM 变化 |
+
+### 标签页
+
+| 工具 | 说明 |
+|:---|:---|
+| `get_tabs` | 列出所有标签页 |
+| `switch_tab` | 切换到指定标签页 |
 | `new_tab` | 在新标签页打开 URL |
-| `close_tab` | 关闭指定序号的标签页 |
+| `close_tab` | 关闭指定标签页 |
 
-### 日志与审计
-
-| 工具 | 说明 |
-|:---|:---|
-| `get_logs` | 查看最近 N 条操作日志（默认 50），文件在 `~/.grasp/audit.log` |
-
-### WebMCP 协议
+### 审计
 
 | 工具 | 说明 |
 |:---|:---|
-| `call_webmcp_tool` | 调用页面原生暴露的 WebMCP 工具（仅 WebMCP 模式可用） |
+| `get_logs` | 最近 N 条操作，来自 `~/.grasp/audit.log` |
+| `call_webmcp_tool` | 调用页面原生 WebMCP 工具（仅 WebMCP 模式） |
+
+---
 
 ## 配置
 
 | 变量 | 默认值 | 说明 |
 |:---|:---|:---|
 | `CHROME_CDP_URL` | `http://localhost:9222` | Chrome 远程调试地址 |
-| `GRASP_SAFE_MODE` | `true` | 设为 `false` 关闭高危操作拦截 |
+| `GRASP_SAFE_MODE` | `true` | 执行前拦截高危操作 |
 
 持久化配置存储在 `~/.grasp/config.json`。
 
+---
+
 ## 仓库结构
 
-- `README.md` / `README.zh-CN.md` — 英文和中文入口
-- `CHANGELOG.md` — 发布历史
-- `CONTRIBUTING.md` — 贡献指南
-- `LICENSE` — MIT
-- `index.js` — CLI 入口和 MCP Server 引导
-- `src/server/` — MCP 工具注册表、状态、审计日志、响应工具
-- `src/layer1-bridge/` — Chrome CDP 连接、WebMCP 探测
-- `src/layer2-perception/` — Hint Map 构建器、指纹注册表
-- `src/layer3-action/` — 真实鼠标/键盘/滚动事件执行
-- `src/cli/` — connect、status、logs 命令；Chrome 检测；AI 客户端自动配置
-- `examples/` — 示例 MCP 客户端配置
-- `start-chrome.bat` — Windows 一键 Chrome 启动脚本
+```
+index.js                    CLI 入口，MCP Server 引导
+src/
+  server/                   工具注册表、状态、审计日志、响应
+  layer1-bridge/            Chrome CDP 连接、WebMCP 探测
+  layer2-perception/        Hint Map、指纹注册表
+  layer3-action/            鼠标曲线、滚轮事件、键盘输入
+  cli/                      connect · status · logs · 自动配置
+examples/                   客户端配置示例
+start-chrome.bat            Windows Chrome 启动脚本
+```
+
+---
 
 ## 许可证
 
-MIT — 完全开源，欢迎 PR。详见 [LICENSE](./LICENSE)。
+MIT — 见 [LICENSE](./LICENSE)。
 
-## 联系与协作
+## 联系
 
 - Issues：https://github.com/Yuzc-001/grasp/issues
 - 邮件：`zxyu24@outlook.com`
-
-Bug、安装问题、文档缺失、功能建议请提 Issue。
-私密合作或不适合公开讨论的问题请发邮件。
 
 ## Star 历史
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Yuzc-001/grasp&type=Date)](https://star-history.com/#Yuzc-001/grasp&Date)
 
-## 延伸阅读
+---
 
-- [README.md](README.md)
-- [CHANGELOG.md](CHANGELOG.md)
-- [CONTRIBUTING.md](CONTRIBUTING.md)
+[README.md](README.md) · [CHANGELOG.md](CHANGELOG.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
