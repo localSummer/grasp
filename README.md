@@ -20,15 +20,19 @@ Grasp is a local MCP server that gives AI agents full browser control through Ch
 
 ## What Grasp stands for
 
-Browser automation for AI was broken in three ways: sessions never persisted, HTML was too expensive to send to a model, and JS injection got blocked.
+Grasp is an open-source, fully local MCP server. No cloud. No subscription. No data leaving your machine.
 
-Grasp fixed all three — and built the architecture from the ground up for the MCP era.
+The design is built around one idea: **the agent should have its own browser, not borrow yours.**
 
-**Three original contributions:**
+`chrome-grasp` is a dedicated Chrome profile that belongs to the agent. It is isolated from your personal browsing. The agent logs in to the services it needs once, and every session persists permanently. Your tabs, history, and extensions are never involved.
 
-**1. The dedicated browser.** Grasp packages the "AI owns its browser" idea as a ready-to-use MCP server. The agent logs in once; every session is saved permanently in `chrome-grasp`. Cloud browsers lose every cookie on shutdown. Local Playwright requires manual persistent context configuration with no MCP-era packaging. Grasp starts logged in — one `npx grasp` to set up everything.
+**What makes Grasp different:**
 
-**2. Hint Map.** Instead of dumping raw HTML into the context window, Grasp scans the live viewport and produces a compact semantic map:
+**Open source and local-first.** The entire codebase is MIT-licensed and runs on your machine. There is no cloud backend, no telemetry, no account required. What the agent does stays between you, the agent, and the browser.
+
+**A browser that belongs to the agent.** Other tools borrow your real browser or spin up a blank one. Grasp gives the agent a profile it owns. Sessions accumulate over time — the longer the agent uses it, the more it has access to.
+
+**Hint Map.** Instead of dumping raw HTML into the context window, Grasp scans the live viewport and produces a compact semantic map:
 
 ```
 [B1] Submit order      (button, pos:450,320)
@@ -36,11 +40,11 @@ Grasp fixed all three — and built the architecture from the ground up for the 
 [L2] Back to cart      (link,   pos:200,400)
 ```
 
-IDs are fingerprint-stable across calls. Token cost drops 90%+ versus raw HTML. This is Grasp's original perception layer — purpose-built for how models actually reason about UI.
+IDs are fingerprint-stable across calls. Token cost drops 90%+ versus raw HTML.
 
-**3. Real events, not injection.** Every click is a mouse curve with randomized timing and landing offset. Every scroll is a sequence of CDP wheel events. Every keystroke has per-character delay. This is not `element.click()` — it is real CDP input that behaves closer to human operation than script injection.
+**Real CDP events.** Every click is a mouse curve. Every scroll is a sequence of wheel events. Every keystroke has per-character delay. Not `element.click()` — real input dispatched through the DevTools Protocol.
 
-On pages that expose `window.__webmcp__`, Grasp calls native tool APIs directly and skips DOM parsing entirely. On every other page — the vast majority of the web — Hint Map and real events take over automatically. The agent never needs to know which mode it is in.
+On pages that expose `window.__webmcp__`, Grasp calls native tool APIs directly and skips DOM parsing entirely. On every other page, Hint Map and real events take over. The agent never needs to know which mode it is in.
 
 ## Why Grasp exists
 
