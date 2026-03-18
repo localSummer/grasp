@@ -15,6 +15,7 @@ export function createServerState() {
     hintCounters: { B: 0, I: 0, L: 0, S: 0 },
     safeMode: isSafeModeEnabled(),
     pageState: createPageState(),
+    taskFrames: new Map(),
   };
 }
 

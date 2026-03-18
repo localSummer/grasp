@@ -10,6 +10,7 @@ import { rankAffordances } from './affordances.js';
 import { extractMainContent, waitUntilStable } from './content.js';
 import { audit, readLogs } from './audit.js';
 import { verifyTypeResult, verifyGenericAction } from './postconditions.js';
+import { runSearchTaskTool } from './tasks/search-task.js';
 import { TYPE_FAILED } from './error-codes.js';
 
 const HIGH_RISK_KEYWORDS = [
@@ -241,6 +242,20 @@ export function registerTools(server, state) {
           command_button: ranking.command_button,
         }
       );
+    }
+  );
+
+  server.registerTool(
+    'search_task',
+    {
+      description: 'Run a verified search task with bounded recovery.',
+      inputSchema: {
+        query: z.string().describe('Query text to run through search workflow'),
+        max_attempts: z.number().int().min(1).optional().describe('Maximum attempts before giving up'),
+      },
+    },
+    async ({ query, max_attempts = 3 }) => {
+      return runSearchTaskTool({ state, query, max_attempts });
     }
   );
 
