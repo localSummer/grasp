@@ -1,6 +1,10 @@
 import { probe, listTools } from '../layer1-bridge/webmcp.js';
 import { buildHintMap } from '../layer2-perception/hints.js';
 
+export function isSafeModeEnabled() {
+  return process.env.GRASP_SAFE_MODE !== 'false';
+}
+
 export function createServerState() {
   return {
     webmcp: null,
@@ -8,7 +12,7 @@ export function createServerState() {
     lastUrl: null,
     hintRegistry: new Map(),   // fingerprint → id，跨调用保持稳定
     hintCounters: { B: 0, I: 0, L: 0, S: 0 },
-    safeMode: process.env.GRASP_SAFE_MODE !== 'false',
+    safeMode: isSafeModeEnabled(),
   };
 }
 

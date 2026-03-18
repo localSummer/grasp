@@ -1,5 +1,6 @@
 import { readConfig } from './config.js';
 import { detectChromePath, startChromeHint } from './detect-chrome.js';
+import { readRuntimeStatus } from '../server/runtime-status.js';
 import { readLogs } from '../server/audit.js';
 
 async function pingChrome(cdpUrl) {
@@ -32,6 +33,9 @@ async function getActiveChromeTab(cdpUrl) {
 export async function runStatus() {
   const config = await readConfig();
   const cdpUrl = process.env.CHROME_CDP_URL || config.cdpUrl;
+  const runtimeStatus = await readRuntimeStatus();
+  const effectiveSafeMode = runtimeStatus?.safeMode ?? config.safeMode;
+  const safeModeNote = effectiveSafeMode === config.safeMode ? '' : ' (runtime override)';
 
   const sep = '─'.repeat(44);
   console.log('');
@@ -41,9 +45,18 @@ export async function runStatus() {
   const chromeInfo = await pingChrome(cdpUrl);
   const connected = chromeInfo !== null;
 
+  const statusLabel = connected ? 'connected (live)' : runtimeStatus?.state ?? 'not reachable';
   console.log(`  CDP URL    ${cdpUrl}`);
+  console.log(`  Connection ${statusLabel}`);
+  if (!connected && runtimeStatus?.lastError) {
+    console.log(`             Last error: ${runtimeStatus.lastError}`);
+  }
+  if (runtimeStatus?.updatedAt) {
+    const updatedAt = new Date(runtimeStatus.updatedAt).toLocaleString();
+    console.log(`             Last seen: ${updatedAt}`);
+  }
   console.log(`  Chrome     ${connected ? 'running  ' + chromeInfo.Browser : 'not reachable'}`);
-  console.log(`  Safe mode  ${config.safeMode ? 'on' : 'off'}`);
+  console.log(`  Safe mode  ${effectiveSafeMode ? 'on' : 'off'}${safeModeNote}`);
 
   if (connected) {
     const tab = await getActiveChromeTab(cdpUrl);

@@ -1,42 +1,162 @@
 import { chromium } from 'playwright-core';
 import { startChromeHint } from '../cli/detect-chrome.js';
+import { writeRuntimeStatus } from '../server/runtime-status.js';
+import { isSafeModeEnabled } from '../server/state.js';
 
 const CDP_URL = process.env.CHROME_CDP_URL || 'http://localhost:9222';
+const DEFAULT_RETRY_DELAYS = [0, 250, 1000];
+const SAFE_MODE = isSafeModeEnabled();
 
-let _browser = null;
-let _connecting = null;
+async function defaultConnect() {
+  try {
+    const browser = await chromium.connectOverCDP(CDP_URL);
+    console.error('[Grasp] Connected to Chrome via CDP:', CDP_URL);
+    return browser;
+  } catch (err) {
+    throw new Error(
+      `Chrome not reachable at ${CDP_URL}.\n` +
+      `Start Chrome with remote debugging enabled:\n` +
+      `  ${startChromeHint(CDP_URL)}\n` +
+      `Or run: grasp status  to diagnose the problem.\n` +
+      `(${err.message})`
+    );
+  }
+}
+
+const defaultPersistStatus = async (snapshot) => {
+  await writeRuntimeStatus(snapshot);
+};
+
+function runPersist(persistFn, snapshot) {
+  if (!persistFn) return;
+  try {
+    const result = persistFn(snapshot);
+    if (result && typeof result.catch === 'function') {
+      result.catch(() => {});
+    }
+  } catch {
+    // swallow
+  }
+}
+
+export function createConnectionSupervisor({
+  connect = defaultConnect,
+  now = () => Date.now(),
+  retryDelays = DEFAULT_RETRY_DELAYS,
+  persistStatus = defaultPersistStatus,
+  safeMode = SAFE_MODE,
+  cdpUrl = CDP_URL,
+} = {}) {
+  let browser = null;
+  let pending = null;
+  let status = {
+    state: 'idle',
+    retryCount: 0,
+    lastError: null,
+    lastAttemptAt: null,
+    connectedAt: null,
+    cdpUrl,
+    safeMode,
+    updatedAt: now(),
+  };
+
+  function updateStatus(updates) {
+    status = {
+      ...status,
+      ...updates,
+      cdpUrl,
+      safeMode,
+      updatedAt: now(),
+    };
+    runPersist(persistStatus, status);
+    return status;
+  }
+
+  function attachDisconnectListener(instance) {
+    if (!instance || typeof instance.once !== 'function') return;
+    instance.once('disconnected', () => {
+      browser = null;
+      updateStatus({ state: 'disconnected', lastError: 'browser disconnected' });
+    });
+  }
+
+  async function attemptConnect() {
+    updateStatus({ state: 'connecting', lastError: null });
+
+    for (let index = 0; index < retryDelays.length; index += 1) {
+      const delayMs = retryDelays[index];
+      if (delayMs) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+
+      const attemptCount = index + 1;
+      updateStatus({
+        retryCount: attemptCount,
+        lastAttemptAt: now(),
+        lastError: null,
+      });
+
+      try {
+        const candidate = await connect();
+        browser = candidate;
+        attachDisconnectListener(candidate);
+        updateStatus({
+          state: 'connected',
+          connectedAt: now(),
+          lastError: null,
+          retryCount: attemptCount,
+        });
+        return candidate;
+      } catch (error) {
+        updateStatus({ lastError: error.message });
+      }
+    }
+
+    updateStatus({ state: 'CDP_UNREACHABLE', retryCount: retryDelays.length, lastAttemptAt: now() });
+    throw new Error(status.lastError ?? 'CDP unreachable');
+  }
+
+  async function getBrowser() {
+    if (browser?.isConnected?.()) {
+      updateStatus({ state: 'connected', connectedAt: now(), lastError: null });
+      return browser;
+    }
+
+    if (pending) {
+      return pending;
+    }
+
+    pending = attemptConnect();
+    try {
+      return await pending;
+    } finally {
+      pending = null;
+    }
+  }
+
+  function getStatus() {
+    return status;
+  }
+
+  function reset() {
+    browser = null;
+    pending = null;
+    updateStatus({
+      state: 'idle',
+      retryCount: 0,
+      lastError: null,
+      lastAttemptAt: null,
+      connectedAt: null,
+    });
+  }
+
+  return { getBrowser, getStatus, reset };
+}
+
+const supervisor = createConnectionSupervisor();
 
 async function getBrowser() {
-  if (_browser && _browser.isConnected()) {
-    return _browser;
-  }
-
-  _browser = null;
-
-  if (_connecting) return _connecting;
-
-  _connecting = (async () => {
-    try {
-      const browser = await chromium.connectOverCDP(CDP_URL);
-      console.error('[Grasp] Connected to Chrome via CDP:', CDP_URL);
-      return browser;
-    } catch (err) {
-      throw new Error(
-        `Chrome not reachable at ${CDP_URL}.\n` +
-        `Start Chrome with remote debugging enabled:\n` +
-        `  ${startChromeHint(CDP_URL)}\n` +
-        `Or run: grasp status  to diagnose the problem.\n` +
-        `(${err.message})`
-      );
-    }
-  })();
-
-  try {
-    _browser = await _connecting;
-    return _browser;
-  } finally {
-    _connecting = null;
-  }
+  return supervisor.getBrowser();
 }
 
 async function getActivePage() {
