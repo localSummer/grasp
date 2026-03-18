@@ -4,6 +4,15 @@ All notable changes to Grasp are documented here.
 
 ---
 
+## v0.1.1 — 2026-03-18
+
+### Added
+- Claude Code skill (`grasp.skill`) — install once, Claude automatically knows when and how to use every Grasp tool
+- `skill/` directory with skill source (`SKILL.md` + `references/tools.md`) for transparency
+- GitHub Action to auto-update star history chart every 6 hours
+
+---
+
 ## v0.1.0 — 2025-03-17
 
 First public release.

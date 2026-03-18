@@ -2,7 +2,7 @@
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [GitHub](https://github.com/Yuzc-001/grasp) · [Issues](https://github.com/Yuzc-001/grasp/issues)
 
-[![Version](https://img.shields.io/badge/version-v0.1.0-0B1738?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.1.1-0B1738?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-23C993?style=flat-square)](./LICENSE)
 [![Validated](https://img.shields.io/badge/validated-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-5B6CFF?style=flat-square)](./README.zh-CN.md#安装)
 [![npm](https://img.shields.io/badge/npm-grasp-CB3837?style=flat-square)](https://www.npmjs.com/package/grasp)
@@ -13,7 +13,7 @@
 
 Grasp 是一个开源 MCP Server，专为浏览器自动化而生。完全本地运行，连接专属的 `chrome-grasp` profile，赋予 AI Agent 完整的浏览器控制能力——导航、交互、感知——零云依赖，不干扰你的个人浏览。
 
-**当前版本：** `v0.1.0`
+**当前版本：** `v0.1.1`
 
 ---
 
@@ -174,9 +174,25 @@ MIT — 见 [LICENSE](./LICENSE)。
 - Issues：https://github.com/Yuzc-001/grasp/issues
 - 邮件：`zxyu24@outlook.com`
 
+## Claude Code Skill
+
+安装随包附带的 skill，让 Claude 获得 Grasp 所有工具的结构化知识——工作流、Hint Map 用法、安全模式和 WebMCP 探测。
+
+**OpenClaw：** 搜索 `grasp`，一键安装。
+
+**手动安装：**
+
+```bash
+curl -L https://github.com/Yuzc-001/grasp/raw/main/grasp.skill -o ~/.claude/skills/grasp.skill
+```
+
+安装后，Claude 自动知道何时、如何使用 Grasp——无需手动提示。
+
+---
+
 ## Star 历史
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Yuzc-001/grasp&type=Date)](https://star-history.com/#Yuzc-001/grasp&Date)
+[![Star History Chart](./star-history.svg)](https://star-history.com/#Yuzc-001/grasp&Date)
 
 ---
 

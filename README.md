@@ -2,7 +2,7 @@
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [GitHub](https://github.com/Yuzc-001/grasp) · [Issues](https://github.com/Yuzc-001/grasp/issues)
 
-[![Version](https://img.shields.io/badge/version-v0.1.0-0B1738?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.1.1-0B1738?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-23C993?style=flat-square)](./LICENSE)
 [![Validated](https://img.shields.io/badge/validated-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-5B6CFF?style=flat-square)](./README.md#install)
 [![npm](https://img.shields.io/badge/npm-grasp-CB3837?style=flat-square)](https://www.npmjs.com/package/grasp)
@@ -13,7 +13,7 @@
 
 Grasp is an open-source MCP server for browser automation. It runs entirely on your machine, connects to a dedicated `chrome-grasp` profile, and gives AI agents full browser control — navigation, interaction, and observation — with no cloud dependency and no interference with your personal browsing.
 
-**Current release:** `v0.1.0`
+**Current release:** `v0.1.1`
 
 ---
 
@@ -174,9 +174,25 @@ MIT — see [LICENSE](./LICENSE).
 - Issues: https://github.com/Yuzc-001/grasp/issues
 - Email: `zxyu24@outlook.com`
 
+## Claude Code Skill
+
+Install the bundled skill to give Claude structured knowledge of every Grasp tool — workflows, hint map usage, safety mode, and WebMCP detection.
+
+**OpenClaw:** Search for `grasp` and install in one click.
+
+**Manual install:**
+
+```bash
+curl -L https://github.com/Yuzc-001/grasp/raw/main/grasp.skill -o ~/.claude/skills/grasp.skill
+```
+
+Once installed, Claude automatically knows when and how to use Grasp — no manual prompting needed.
+
+---
+
 ## Star history
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Yuzc-001/grasp&type=Date)](https://star-history.com/#Yuzc-001/grasp&Date)
+[![Star History Chart](./star-history.svg)](https://star-history.com/#Yuzc-001/grasp&Date)
 
 ---
 
