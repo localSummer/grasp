@@ -37,7 +37,7 @@ export async function verifyGenericAction({ page, hintId, prevDomRevision, prevU
   const urlChanged = currentUrl !== prevUrl;
   const activeChanged = snapshot.activeId !== prevActiveId;
 
-  if (domChanged || urlChanged || snapshot.elementVisible || activeChanged) {
+  if (domChanged || urlChanged || activeChanged) {
     return {
       ok: true,
       evidence: {

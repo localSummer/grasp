@@ -68,3 +68,22 @@ test('verifyGenericAction fails when nothing observable changes', async () => {
   assert.strictEqual(result.error_code, ACTION_NOT_VERIFIED);
   assert.strictEqual(result.retryable, true);
 });
+
+test('verifyGenericAction fails when element still visible but no observable changes', async () => {
+  const page = createFakePage({
+    url: () => 'https://example.com',
+    evaluate: async () => ({ elementVisible: true, activeId: 'I1' }),
+  });
+
+  const result = await verifyGenericAction({
+    page,
+    hintId: 'I1',
+    prevDomRevision: 1,
+    prevUrl: 'https://example.com',
+    prevActiveId: 'I1',
+    newDomRevision: 1,
+  });
+
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.error_code, ACTION_NOT_VERIFIED);
+});
