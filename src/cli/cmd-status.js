@@ -31,6 +31,13 @@ async function getActiveChromeTab(cdpUrl) {
   }
 }
 
+export function formatConnectionLabel(connected, runtimeStatus) {
+  if (connected) return 'connected (live)';
+  if (runtimeStatus?.state === 'CDP_UNREACHABLE') return 'CDP_UNREACHABLE';
+  if (runtimeStatus?.state) return 'disconnected';
+  return 'CDP_UNREACHABLE';
+}
+
 export async function runStatus() {
   const config = await readConfig();
   const cdpUrl = process.env.CHROME_CDP_URL || config.cdpUrl;
@@ -46,7 +53,7 @@ export async function runStatus() {
   const chromeInfo = await pingChrome(cdpUrl);
   const connected = chromeInfo !== null;
 
-  const statusLabel = connected ? 'connected (live)' : (runtimeStatus?.state ?? 'CDP_UNREACHABLE');
+  const statusLabel = formatConnectionLabel(connected, runtimeStatus);
   console.log(`  CDP URL    ${cdpUrl}`);
   console.log(`  Connection ${statusLabel}`);
   if (!connected && runtimeStatus?.lastError) {
