@@ -142,11 +142,16 @@ export function createConnectionSupervisor({
     browser = null;
     pending = null;
     updateStatus({
-      state: 'idle',
-      retryCount: 0,
-      lastError: null,
-      lastAttemptAt: null,
-      connectedAt: null,
+      cdp: { state: 'unknown', browserVersion: null, protocolVersion: null },
+      page: { state: 'unknown', title: null, url: null },
+      browser_process: { state: 'unknown', pid: null },
+      server: {
+        state: 'idle',
+        retryCount: 0,
+        lastError: null,
+        lastAttemptAt: null,
+        connectedAt: null,
+      },
     });
   }
 

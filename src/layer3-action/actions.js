@@ -206,19 +206,21 @@ export async function typeByHintId(page, hintId, text, pressEnter = false, optio
  */
 export async function watchElement(page, selector, condition = 'appears', timeout = 30000) {
   return page.evaluate(
-    (sel, cond, ms) => {
+    ({ selector: sel, condition: cond, timeout: ms }) => {
       return new Promise((resolve) => {
         let settled = false;
+        let observer;
+        let timer;
+        let initialText;
 
         function done(result) {
           if (settled) return;
           settled = true;
-          observer.disconnect();
+          observer?.disconnect();
           clearTimeout(timer);
           resolve(result);
         }
 
-        // Immediate check before setting up observer
         function check() {
           const el = document.querySelector(sel);
           if (cond === 'appears') {
@@ -232,7 +234,6 @@ export async function watchElement(page, selector, condition = 'appears', timeou
               return true;
             }
           } else if (cond === 'changes') {
-            // For 'changes', we need a baseline; initial check just records state
             if (el) {
               initialText = el.innerText?.trim();
             }
@@ -240,19 +241,14 @@ export async function watchElement(page, selector, condition = 'appears', timeou
           return false;
         }
 
-        let initialText;
-
-        // Run immediate check
         const immediatelyMet = check();
         if (immediatelyMet) return;
 
-        // Timeout handler
-        const timer = setTimeout(() => {
+        timer = setTimeout(() => {
           done({ timeout: true });
         }, ms);
 
-        // MutationObserver callback
-        const observer = new MutationObserver(() => {
+        observer = new MutationObserver(() => {
           const el = document.querySelector(sel);
           if (cond === 'appears') {
             if (el) {
@@ -280,9 +276,7 @@ export async function watchElement(page, selector, condition = 'appears', timeou
         }
       });
     },
-    selector,
-    condition,
-    timeout
+    { selector, condition, timeout }
   );
 }
 

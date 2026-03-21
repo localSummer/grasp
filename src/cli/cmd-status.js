@@ -1,6 +1,6 @@
 import { readConfig } from './config.js';
 import { detectChromePath, startChromeHint } from './detect-chrome.js';
-import { readRuntimeStatus } from '../server/runtime-status.js';
+import { readRuntimeTruth } from '../server/runtime-status.js';
 import { readLogs } from '../server/audit.js';
 import { isSafeModeEnabled } from '../server/state.js';
 
@@ -31,17 +31,22 @@ async function getActiveChromeTab(cdpUrl) {
   }
 }
 
-export function formatConnectionLabel(connected, runtimeStatus) {
+export function formatConnectionLabel(connected, runtimeTruth) {
   if (connected) return 'connected (live)';
-  if (runtimeStatus?.state === 'CDP_UNREACHABLE') return 'CDP_UNREACHABLE';
-  if (runtimeStatus?.state) return 'disconnected';
+
+  // Backward compatibility for legacy runtime-status snapshots/tests.
+  if (runtimeTruth?.state === 'CDP_UNREACHABLE') return 'CDP_UNREACHABLE';
+  if (runtimeTruth?.state) return 'disconnected';
+
+  if (runtimeTruth?.cdp?.state === 'unreachable') return 'CDP_UNREACHABLE';
+  if (runtimeTruth?.server?.state && runtimeTruth.server.state !== 'idle') return 'disconnected';
   return 'CDP_UNREACHABLE';
 }
 
 export async function runStatus() {
   const config = await readConfig();
   const cdpUrl = process.env.CHROME_CDP_URL || config.cdpUrl;
-  const runtimeStatus = await readRuntimeStatus();
+  const runtimeTruth = await readRuntimeTruth();
   const safeMode = isSafeModeEnabled();
   const safeModeNote = safeMode === config.safeMode ? '' : ` (config: ${config.safeMode ? 'on' : 'off'})`;
 
@@ -53,14 +58,14 @@ export async function runStatus() {
   const chromeInfo = await pingChrome(cdpUrl);
   const connected = chromeInfo !== null;
 
-  const statusLabel = formatConnectionLabel(connected, runtimeStatus);
+  const statusLabel = formatConnectionLabel(connected, runtimeTruth);
   console.log(`  CDP URL    ${cdpUrl}`);
   console.log(`  Connection ${statusLabel}`);
-  if (!connected && runtimeStatus?.lastError) {
-    console.log(`             Last error: ${runtimeStatus.lastError}`);
+  if (!connected && runtimeTruth?.server?.lastError) {
+    console.log(`             Last error: ${runtimeTruth.server.lastError}`);
   }
-  if (runtimeStatus?.updatedAt) {
-    const updatedAt = new Date(runtimeStatus.updatedAt).toLocaleString();
+  if (runtimeTruth?.updatedAt) {
+    const updatedAt = new Date(runtimeTruth.updatedAt).toLocaleString();
     console.log(`             Last seen: ${updatedAt}`);
   }
   console.log(`  Chrome     ${connected ? 'running  ' + chromeInfo.Browser : 'not reachable'}`);
@@ -70,7 +75,7 @@ export async function runStatus() {
     const tab = await getActiveChromeTab(cdpUrl);
     if (tab) {
       const title = tab.title?.slice(0, 50) || '(no title)';
-      const url   = tab.url?.slice(0, 70) || '';
+      const url = tab.url?.slice(0, 70) || '';
       console.log(`  Active tab ${title}`);
       console.log(`             ${url}`);
     }
@@ -78,13 +83,13 @@ export async function runStatus() {
     const chromePath = detectChromePath();
     console.log('');
     if (chromePath) {
-      console.log(`  Chrome found at:`);
+      console.log('  Chrome found at:');
       console.log(`    ${chromePath}`);
       console.log('');
-      console.log(`  Start it for Grasp:`);
+      console.log('  Start it for Grasp:');
       console.log(`    ${startChromeHint(cdpUrl)}`);
     } else {
-      console.log(`  Chrome not found. Install Google Chrome, then run:`);
+      console.log('  Chrome not found. Install Google Chrome, then run:');
       console.log(`    ${startChromeHint(cdpUrl)}`);
     }
   }
@@ -92,8 +97,8 @@ export async function runStatus() {
   const logs = await readLogs(3);
   if (logs.length > 0) {
     console.log('');
-    console.log(`  Recent activity`);
-    logs.forEach(l => console.log(`    ${l}`));
+    console.log('  Recent activity');
+    logs.forEach((l) => console.log(`    ${l}`));
   }
 
   console.log('');

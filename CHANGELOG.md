@@ -4,6 +4,34 @@ All notable changes to Grasp are documented here.
 
 ---
 
+## v0.4.0 — 2026-03-21
+
+The release where Grasp becomes a browser runtime centered on continuity: runtime truth, page grasp, verified actions, persisted handoff, and false-verified rejection.
+
+
+### Added
+- Runtime Truth mainline integration for browser/runtime status normalization, including unified truth read/write flow and legacy compatibility bridge
+- Explicit Handoff / Resume state model with persisted runtime-scoped handoff state at `~/.grasp/handoff-state.json`
+- Task continuation anchors for handoff recovery: `expected_url_contains`, `expected_page_role`, and `expected_selector`
+- Persisted-anchor inheritance in `resume_after_handoff`, so continuation checks can survive across calls without re-supplying anchors
+- False-verified defense for handoff recovery: resumed sessions now fall to `resumed_unverified` when continuation anchors do not match
+- Additional handoff regression coverage for persisted anchors and continuation mismatch handling
+
+### Changed
+- `src/server/tools.js` was rewritten into a cleaner `v0.4` mainline surface centered on navigation, grasp status, verified actions, and handoff continuity
+- Mainline interaction surface now includes verified / runtime-aligned support for `hover`, `press_key`, `watch_element`, and `scroll`
+- `resume_after_handoff` now evaluates continuation evidence instead of relying on page reacquisition alone
+- Documentation surface was reduced and cleaned: current-state docs stay at the top level, while older design/test materials were archived
+
+### Validated
+- Full test suite passes: `49 / 49`
+- Cross-call handoff persistence closes from `handoff_required` to `resumed_verified`
+- High-friction GitHub login page now has both:
+  - positive continuation evidence (`resumed_verified` with matching anchors)
+  - false-verified rejection (`resumed_unverified` with mismatched anchors)
+
+---
+
 ## v0.3.0 — 2026-03-19
 
 ### Added

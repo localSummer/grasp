@@ -2,18 +2,54 @@
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [GitHub](https://github.com/Yuzc-001/grasp) · [Issues](https://github.com/Yuzc-001/grasp/issues)
 
-[![Version](https://img.shields.io/badge/version-v0.3.0-0B1738?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.4.0-0B1738?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-23C993?style=flat-square)](./LICENSE)
 [![Validated](https://img.shields.io/badge/validated-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-5B6CFF?style=flat-square)](./README.md#install)
 [![npm](https://img.shields.io/badge/npm-grasp-CB3837?style=flat-square)](https://www.npmjs.com/package/grasp)
 
-> **Give AI its own browser.**
+> **Give AI its own browser runtime.**
 >
-> Log in once. Every session persists. Your Chrome stays yours.
+> Persistent state, verified actions, and recoverable handoff — on your machine, in your Chrome profile.
 
-Grasp is an open-source MCP server for browser automation. It runs entirely on your machine, connects to a dedicated `chrome-grasp` profile, and gives AI agents full browser control — navigation, interaction, and observation — with no cloud dependency and no interference with your personal browsing.
+Grasp is an open-source MCP browser runtime for AI agents. It runs entirely on your machine, connects to a dedicated `chrome-grasp` profile, and gives agents not just browser control, but browser continuity: page grasp, action verification, handoff persistence, and recovery after human intervention.
 
-**Current release:** `v0.3.0`
+**Current release:** `v0.4.0`
+
+**Release docs:**
+- [Release Notes](./docs/release-notes-v0.4.0.md)
+- [Implementation Milestone](./docs/grasp_v0.4_主干里程碑_v1.md)
+- [Product Positioning](./docs/grasp_作品诊断与定位收紧建议_v1.md)
+
+---
+
+## What makes v0.4 different
+
+`v0.4` is not just “more browser tools”.
+It is the point where Grasp starts acting like a browser runtime instead of a browser wrapper.
+
+### v0.4 mainline
+- **Runtime Truth** — browser/runtime status is normalized into a single truth layer
+- **Page Grasp** — Grasp tracks page role, confidence, page identity, and reacquisition state
+- **Verified actions** — `click` / `type` return structured evidence instead of blind success
+- **Recoverable handoff** — human-required steps can be requested, persisted, and resumed across calls
+- **Task continuation anchors** — resume can verify expected URL, page role, and selector presence
+- **False-verified defense** — Grasp can reject a resumed session when the page came back but the task did not
+
+### What Grasp claims in v0.4
+- the agent can own a persistent browser profile
+- the agent can reason over a compact semantic view of the page
+- the agent can verify observable action outcomes
+- the agent can survive handoff / resume across calls
+- the agent can reject wrong recovery when continuation anchors do not match
+
+### What Grasp does not claim in v0.4
+- universal bypass of high-friction or strongly verified environments
+- fully autonomous completion of every login or CAPTCHA flow
+- full task-semantic recovery for every multi-step workflow
+
+In short:
+
+# Grasp v0.4 is about continuity, not just control.
 
 ---
 
@@ -23,7 +59,7 @@ The agent should have its own browser. Not a borrowed session, not a fresh blank
 
 `chrome-grasp` is that profile. The agent logs in to the services it needs. Those sessions outlast every run. Your tabs and history are never touched.
 
-Three principles shape how Grasp works:
+Four principles shape how Grasp works:
 
 **Local and open.** The entire codebase is MIT-licensed and runs on your hardware. No cloud backend. No telemetry. No account. What the agent does is visible only to you.
 
@@ -35,17 +71,13 @@ Three principles shape how Grasp works:
 [L2] Back to cart      (link,   pos:200,400)
 ```
 
-IDs are fingerprint-stable across calls. Token cost drops 90%+ versus passing raw HTML. The agent reasons about UI the way it reasons about everything else — through structured, meaningful data.
+IDs are fingerprint-stable across calls. Token cost drops 90%+ versus passing raw HTML. The agent reasons about UI through structured, meaningful data.
 
-**Real input, not scripted automation.** Every click traces a curved path across the screen. Every scroll arrives as a sequence of wheel events. Every keystroke carries its own timing. This is input dispatched through Chrome DevTools Protocol — not `element.click()`.
+**Real input plus verification.** Every click traces a curved path across the screen. Every scroll arrives as a sequence of wheel events. Every keystroke carries its own timing. This is input dispatched through Chrome DevTools Protocol — not `element.click()`. In `v0.4`, that input is increasingly paired with post-action verification and grasp evidence.
 
-On pages that expose `window.__webmcp__`, Grasp bypasses the DOM entirely and calls native tool APIs directly. On every other page, Hint Map and real events handle the interaction. The agent does not need to know which path was taken.
+**Handoff is first-class.** For high-friction or strongly verified environments, Grasp accepts one-time human presence. It does not try to erase every gate. It turns a necessary human step into persisted browser state and a recoverable continuation path.
 
-**For high-friction or strongly verified environments, Grasp accepts one-time human presence.**
-It does not try to erase every gate.
-It turns a necessary first confirmation into browser state the agent can keep using afterwards.
-
-**It does not eliminate gates. It eliminates the repetition of gates.**
+**It does not eliminate gates. It eliminates the repetition of gates — and it rejects the wrong recovery.**
 
 ---
 
@@ -103,53 +135,36 @@ args    = ["-y", "grasp"]
 
 ## MCP tools
 
-### Navigation
+### v0.4 mainline surface
 
 | Tool | Description |
 |:---|:---|
-| `navigate` | Navigate to URL, auto-detect WebMCP |
-| `get_status` | Connection state, current page, execution mode |
-| `get_page_summary` | Title, URL, visible text (first 2000 chars) |
-| `wait_until_stable` | Wait for repeated page snapshots to stop changing |
-| `extract_main_content` | Extract focused main/article text from the current page |
-| `screenshot` | Capture current viewport (base64) |
+| `navigate` | Navigate to a URL and refresh runtime/page grasp state |
+| `get_status` | Current browser/runtime status, page role, grasp confidence, handoff state |
+| `get_page_summary` | Title, URL, mode, and concise visible content |
+| `get_hint_map` | Return the semantic interaction map for the current viewport |
+| `click` | Click by hint ID with post-action verification and evidence |
+| `type` | Type by hint ID with verification |
+| `hover` | Hover by hint ID and refresh visible interaction state |
+| `press_key` | Send keyboard input and refresh page state |
+| `watch_element` | Watch a selector for appears / disappears / changes |
+| `scroll` | Scroll the current page and refresh page grasp |
+| `request_handoff` | Persist that the workflow now requires human help |
+| `mark_handoff_in_progress` | Mark that a human is actively handling the step |
+| `mark_handoff_done` | Mark that the human step is complete and reacquisition should begin |
+| `resume_after_handoff` | Reacquire the page and verify continuation anchors before resuming |
+| `clear_handoff` | Clear handoff state and return to idle |
 
-### Interaction
+### Notes on the v0.4 surface
 
-| Tool | Description |
-|:---|:---|
-| `get_hint_map` | Scan viewport, return semantic map |
-| `get_form_fields` | Identify form fields, aligned with hint map IDs |
-| `search_affordances` | Rank the current page's search-friendly inputs and submit controls |
-| `click` | Click by hint ID; high-risk actions intercepted |
-| `confirm_click` | Force-click a high-risk element |
-| `type` | Type text keystroke-by-keystroke |
-| `hover` | Hover to trigger dropdowns or tooltips |
-| `scroll` | Scroll up or down with real wheel events |
-| `press_key` | Send keyboard shortcuts |
-| `watch_element` | Watch a CSS selector for DOM changes |
+- `resume_after_handoff` supports task continuation anchors:
+  - `expected_url_contains`
+  - `expected_page_role`
+  - `expected_selector`
+- Anchors can be persisted in `request_handoff` and inherited automatically during resume
+- Continuation mismatch now causes `resumed_unverified` instead of a false `verified` state
 
-### Task Schedulers
-
-| Tool | Description |
-|:---|:---|
-| `search_task` | Run a verified search workflow with bounded recovery and stable metrics (`attempts`, `toolCalls`, `retries`, `recovered`) |
-
-### Tabs
-
-| Tool | Description |
-|:---|:---|
-| `get_tabs` | List all open tabs |
-| `switch_tab` | Switch to tab by index |
-| `new_tab` | Open URL in a new tab |
-| `close_tab` | Close tab by index |
-
-### Audit
-
-| Tool | Description |
-|:---|:---|
-| `get_logs` | Last N operations from `~/.grasp/audit.log` |
-| `call_webmcp_tool` | Call a native WebMCP tool (WebMCP mode only) |
+Legacy and auxiliary capabilities may still exist in the codebase, but the table above is the current `v0.4` mainline surface.
 
 ---
 
@@ -164,16 +179,19 @@ Persistent config at `~/.grasp/config.json`.
 
 ## Recovery Semantics
 
-Interactive tools now surface structured failures through response metadata:
+`v0.4` tools increasingly surface structured recovery signals through response metadata:
 
 - `error_code` identifies the failure class (`CDP_UNREACHABLE`, `STALE_HINT`, `ACTION_NOT_VERIFIED`, and friends)
 - `retryable` tells the caller whether bounded recovery is safe
 - `suggested_next_step` points to the next move (`retry`, `reobserve`, `wait_then_reverify`)
 - `evidence` includes the page-level details used by the verifier
+- handoff recovery can also include continuation evidence showing whether expected URL / role / selector anchors matched
 
-The `search_task` scheduler builds on the same contract and returns stable benchmark fields directly in the tool result. `toolCalls` counts scheduler action steps (`type`, `click`, `press_key`) rather than state-sync internals, while `recovered` indicates that a bounded recovery path was needed.
+This is part of the larger `v0.4` shift:
+- not just executing browser actions
+- but deciding whether recovery was actually valid
 
-Benchmark smoke scenarios and reporting rules live in [docs/benchmarks/search-benchmark.md](./docs/benchmarks/search-benchmark.md).
+Benchmark smoke scenarios and reporting rules still live in [docs/benchmarks/search-benchmark.md](./docs/benchmarks/search-benchmark.md).
 
 ---
 

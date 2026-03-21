@@ -1,6 +1,8 @@
 import { probe, listTools } from '../layer1-bridge/webmcp.js';
 import { buildHintMap } from '../layer2-perception/hints.js';
-import { createPageState, applySnapshotToPageState } from './page-state.js';
+import { createHandoffState } from '../grasp/handoff/state.js';
+import { createPageGraspState, applySnapshotToPageGraspState } from '../grasp/page/state.js';
+import { capturePageSnapshot } from '../grasp/page/capture.js';
 
 export function isSafeModeEnabled() {
   return process.env.GRASP_SAFE_MODE !== 'false';
@@ -11,37 +13,40 @@ export function createServerState() {
     webmcp: null,
     hintMap: [],
     lastUrl: null,
-    hintRegistry: new Map(),   // fingerprint → id，跨调用保持稳定
+    hintRegistry: new Map(),
     hintCounters: { B: 0, I: 0, L: 0, S: 0 },
     safeMode: isSafeModeEnabled(),
-    pageState: createPageState(),
+    pageState: createPageGraspState(),
+    handoff: createHandoffState(),
+    runtimeTruth: null,
+    verificationContext: null,
     taskFrames: new Map(),
   };
 }
 
 export async function syncPageState(page, state, { force = false } = {}) {
   const url = page.url();
-  const snapshotData = await page.evaluate(() => {
-    const bodyText = document.body?.innerText?.replace(/\s+/g, ' ').trim().slice(0, 500) ?? '';
-    const nodes = document.querySelectorAll('button,a,input,textarea,select,[role],[contenteditable]').length;
-    return { bodyText, nodes };
-  });
-
+  const snapshotData = await capturePageSnapshot(page);
   const snapshotHash = `${url}|${snapshotData.nodes}|${snapshotData.bodyText}`;
-  const prevPageState = state.pageState ?? createPageState();
-  const nextPageState = applySnapshotToPageState(prevPageState, { url, snapshotHash });
+  const prevPageState = state.pageState ?? createPageGraspState();
+  const nextPageState = applySnapshotToPageGraspState(prevPageState, {
+    url,
+    snapshotHash,
+    title: snapshotData.title,
+    bodyText: snapshotData.bodyText,
+    nodes: snapshotData.nodes,
+    forms: snapshotData.forms,
+    navs: snapshotData.navs,
+    headings: snapshotData.headings,
+  });
   const urlChanged = prevPageState.lastUrl !== url;
   const domRevisionChanged = prevPageState.domRevision !== nextPageState.domRevision;
   state.pageState = nextPageState;
   state.lastUrl = nextPageState.lastUrl;
 
   const needsRefresh = force || state.webmcp === null || urlChanged || domRevisionChanged;
+  if (!needsRefresh) return state;
 
-  if (!needsRefresh) {
-    return state;
-  }
-
-  // URL 变化 → 新页面，清空 hint 注册表
   if (urlChanged) {
     state.hintRegistry = new Map();
     state.hintCounters = { B: 0, I: 0, L: 0, S: 0 };
