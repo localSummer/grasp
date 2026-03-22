@@ -12,7 +12,7 @@ Expected:
 | Tool | Expected status | Expected result | Expected continuation |
 |---|---|---|---|
 | `entry` | `direct` | no `result` payload | `can_continue: true`, `suggested_next_action: inspect` |
-| `inspect` | `direct` | no `result` payload | `can_continue: true`, `suggested_next_action: extract` |
+| `inspect` | `direct` | page reports a readable content state | `can_continue: true`, `suggested_next_action: extract` |
 | `extract` | `direct` | `main_text` is non-empty | `can_continue: true`, `suggested_next_action: inspect` |
 
 ## 2. Session Establish / Trusted Entry
