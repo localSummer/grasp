@@ -36,8 +36,11 @@ Expected:
 
 | Tool | Expected status | Expected result | Expected continuation |
 |---|---|---|---|
-| `entry` | `gated` or `handoff_required` | no `result` payload | `can_continue: false`, `suggested_next_action: request_handoff` |
+| `entry` | `gated` | no `result` payload | `can_continue: false`, `suggested_next_action: request_handoff` |
 | `continue` | `gated` or `handoff_required` | no `result` payload | `can_continue: false`, `suggested_next_action: request_handoff` |
-| `request_handoff` | `handoff_required` | no `result` payload | records the human step that needs to happen next |
-| `mark_handoff_done` | `awaiting_reacquisition` | no `result` payload | indicates the handoff is complete and ready to resume |
-| `resume_after_handoff` | `resumed_verified` or `resumed_unverified` | continuation evidence is returned | clear next action instead of blind success |
+
+Expected handoff primitive output:
+
+- `request_handoff` confirms `State: handoff_required` and records the human step that needs to happen next
+- `mark_handoff_done` confirms `State: awaiting_reacquisition` and indicates the handoff is complete and ready to resume
+- `resume_after_handoff` returns continuation evidence in its output, including a clear next action instead of blind success
