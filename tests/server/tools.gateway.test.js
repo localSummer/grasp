@@ -7,8 +7,12 @@ test('entry returns a gateway response with strategy metadata', async () => {
   const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
   const state = { pageState: { currentRole: 'content', graspConfidence: 'high', riskGateDetected: false }, handoff: { state: 'idle' } };
 
+  let receivedArgs;
   registerGatewayTools(server, state, {
-    enterWithStrategy: async () => ({ url: 'https://example.com', title: 'Example', preflight: { session_trust: 'high' }, pageState: state.pageState }),
+    enterWithStrategy: async (args) => {
+      receivedArgs = args;
+      return { url: 'https://example.com', title: 'Example', preflight: { session_trust: 'high' }, pageState: state.pageState };
+    },
   });
 
   const entry = calls.find((tool) => tool.name === 'entry');
@@ -17,6 +21,7 @@ test('entry returns a gateway response with strategy metadata', async () => {
   assert.equal(result.meta.status, 'direct');
   assert.equal(result.meta.page.url, 'https://example.com');
   assert.equal(result.meta.continuation.suggested_next_action, 'inspect');
+  assert.equal(receivedArgs.auditName, 'entry');
 });
 
 test('entry marks low-trust preheat outcomes as warmup', async () => {
@@ -42,7 +47,7 @@ test('entry marks handoff or preheat outcomes as gated', async () => {
   const state = { pageState: { currentRole: 'checkpoint', graspConfidence: 'low', riskGateDetected: true }, handoff: { state: 'idle' } };
 
   registerGatewayTools(server, state, {
-    enterWithStrategy: async () => ({ url: 'https://github.com', title: 'Just a moment', preflight: { session_trust: 'low', recommended_entry_strategy: 'handoff_or_preheat' }, pageState: state.pageState }),
+    enterWithStrategy: async () => ({ url: 'https://github.com', title: 'Just a moment', preflight: { session_trust: 'low', recommended_entry_strategy: 'handoff_or_preheat' }, pageState: state.pageState, handoff: { state: 'handoff_required' } }),
   });
 
   const entry = calls.find((tool) => tool.name === 'entry');
@@ -51,4 +56,5 @@ test('entry marks handoff or preheat outcomes as gated', async () => {
   assert.equal(result.meta.status, 'gated');
   assert.equal(result.meta.continuation.can_continue, false);
   assert.equal(result.meta.continuation.suggested_next_action, 'request_handoff');
+  assert.equal(result.meta.continuation.handoff_state, 'handoff_required');
 });

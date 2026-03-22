@@ -52,7 +52,7 @@ export function registerGatewayTools(server, state, deps = {}) {
       },
     },
     async ({ url }) => {
-      const outcome = await enter({ url, state });
+      const outcome = await enter({ url, state, auditName: 'entry' });
       const gatewayOutcome = buildGatewayOutcome(outcome);
 
       return buildGatewayResponse({
@@ -61,7 +61,7 @@ export function registerGatewayTools(server, state, deps = {}) {
         continuation: {
           can_continue: gatewayOutcome.canContinue,
           suggested_next_action: gatewayOutcome.suggestedNextAction,
-          handoff_state: state.handoff?.state ?? 'idle',
+          handoff_state: outcome.handoff?.state ?? state.handoff?.state ?? 'idle',
         },
         evidence: { strategy: outcome.preflight ?? null },
       });
