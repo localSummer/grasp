@@ -50,25 +50,45 @@ function isSelectedItem(item) {
   return item?.selected === true;
 }
 
+function hasExactLoadingShellText(text) {
+  return text.includes('加载中，请稍候')
+    || (text.includes('加载中') && text.includes('请稍候'))
+    || text.includes('正在加载');
+}
+
+function hasThreadPromptText(text) {
+  return text.includes('按enter键发送')
+    || text.includes('发送消息')
+    || text.includes('发消息')
+    || text.includes('输入消息');
+}
+
+function hasThreadContextText(text) {
+  return text.includes('消息')
+    || text.includes('聊天')
+    || text.includes('对话');
+}
+
+function hasSendActionControl(actionControls) {
+  return actionControls.some((control) => {
+    const label = normalizeLabel(control?.label);
+    return label.includes('发送')
+      || label.includes('send')
+      || label.includes('回复')
+      || label.includes('提交');
+  });
+}
+
 function hasThreadEvidence(snapshot) {
   const bodyText = pickText(snapshot, 'bodyText', 'body_text').toLowerCase();
-  const composer = getComposer(snapshot);
   const actionControls = getActionControls(snapshot);
   const liveItems = getLiveItems(snapshot);
 
-  if (bodyText.includes('加载中，请稍候') || bodyText.includes('loading')) {
-    return false;
-  }
-
-  if (bodyText.includes('按enter键发送') || bodyText.includes('发送消息') || bodyText.includes('发消息') || bodyText.includes('输入消息')) {
+  if (hasThreadPromptText(bodyText)) {
     return true;
   }
 
-  if (bodyText.includes('聊天') || bodyText.includes('对话') || bodyText.includes('消息')) {
-    return true;
-  }
-
-  if (liveItems.some(isSelectedItem) && actionControls.some((control) => normalizeLabel(control?.label).includes('发送'))) {
+  if (hasThreadContextText(bodyText) && liveItems.some(isSelectedItem) && hasSendActionControl(actionControls)) {
     return true;
   }
 
@@ -78,10 +98,7 @@ function hasThreadEvidence(snapshot) {
 function hasComposerEvidence(snapshot) {
   const composer = getComposer(snapshot);
   if (!composer) return false;
-  return composer.draft_present === true
-    || compactText(composer.draft_text)
-    || composer.kind === 'chat_composer'
-    || composer.kind === 'composer';
+  return composer.kind === 'chat_composer';
 }
 
 export function classifyWorkspaceSurface(snapshot = {}) {
@@ -90,7 +107,7 @@ export function classifyWorkspaceSurface(snapshot = {}) {
   }
 
   const bodyText = pickText(snapshot, 'bodyText', 'body_text').toLowerCase();
-  if (bodyText.includes('加载中') || bodyText.includes('请稍候') || bodyText.includes('loading') || bodyText.includes('please wait')) {
+  if (hasExactLoadingShellText(bodyText)) {
     return 'loading_shell';
   }
 
@@ -181,11 +198,13 @@ function getRecoveryHint(selectionWindow, liveItems, detailPanel) {
   return null;
 }
 
-function getOutcomeSignals(snapshot, composer, activeItem) {
+function getOutcomeSignals(snapshot, composer, activeItem, detailAlignment) {
   const bodyText = pickText(snapshot, 'bodyText', 'body_text').toLowerCase();
   const delivered = bodyText.includes('已发送') || bodyText.includes('发送成功') || bodyText.includes('delivered') || bodyText.includes('sent');
   const composerCleared = !!composer && composer.draft_present === false && !compactText(composer.draft_text);
-  const activeItemStable = !!activeItem && getDetailAlignment(activeItem, getDetailPanel(snapshot)) === 'aligned';
+  const activeItemStable = detailAlignment !== undefined
+    ? detailAlignment === 'aligned'
+    : !!activeItem && getDetailAlignment(activeItem, getDetailPanel(snapshot)) === 'aligned';
 
   return {
     delivered,
@@ -206,13 +225,18 @@ export function summarizeWorkspaceSnapshot(snapshot = {}) {
   const composer = getComposer(snapshot);
   const detailPanel = getDetailPanel(snapshot);
   const blockingModals = getBlockingModals(snapshot);
-  const loadingShell = getLoadingShell(snapshot);
-  const activeItem = getActiveItem(snapshot, liveItems, detailPanel);
+  const loadingShell = snapshot.loading_shell !== undefined ? snapshot.loading_shell : snapshot.loadingShell;
+  const rawActiveItem = snapshot.active_item !== undefined ? snapshot.active_item : snapshot.activeItem;
+  const rawDetailAlignment = snapshot.detail_alignment !== undefined ? snapshot.detail_alignment : snapshot.detailAlignment;
+  const rawSelectionWindow = snapshot.selection_window !== undefined ? snapshot.selection_window : snapshot.selectionWindow;
+  const rawRecoveryHint = snapshot.recovery_hint !== undefined ? snapshot.recovery_hint : snapshot.recoveryHint;
+  const rawOutcomeSignals = snapshot.outcome_signals !== undefined ? snapshot.outcome_signals : snapshot.outcomeSignals;
+  const activeItem = rawActiveItem !== undefined ? rawActiveItem : getActiveItem(snapshot, liveItems, detailPanel);
   const workspaceSurface = pick(snapshot, 'workspaceSurface', 'workspace_surface', null) ?? classifyWorkspaceSurface(snapshot);
-  const detailAlignment = getDetailAlignment(activeItem, detailPanel);
-  const selectionWindow = getSelectionWindow(activeItem, detailPanel, liveItems);
-  const recoveryHint = getRecoveryHint(selectionWindow, liveItems, detailPanel);
-  const outcomeSignals = pick(snapshot, 'outcomeSignals', 'outcome_signals', null) ?? getOutcomeSignals(snapshot, composer, activeItem);
+  const detailAlignment = rawDetailAlignment !== undefined ? rawDetailAlignment : getDetailAlignment(activeItem, detailPanel);
+  const selectionWindow = rawSelectionWindow !== undefined ? rawSelectionWindow : getSelectionWindow(activeItem, detailPanel, liveItems);
+  const recoveryHint = rawRecoveryHint !== undefined ? rawRecoveryHint : getRecoveryHint(selectionWindow, liveItems, detailPanel);
+  const outcomeSignals = rawOutcomeSignals !== undefined ? rawOutcomeSignals : getOutcomeSignals(snapshot, composer, activeItem, detailAlignment);
   const summary = getSummaryString({
     workspaceSurface,
     activeItem,
@@ -227,7 +251,7 @@ export function summarizeWorkspaceSnapshot(snapshot = {}) {
     workspace_surface: workspaceSurface,
     active_item_label: activeItem?.label ?? null,
     draft_present: composer?.draft_present === true,
-    loading_shell: loadingShell,
+    loading_shell: loadingShell !== undefined ? loadingShell : getLoadingShell(snapshot),
     blocking_modals: blockingModals,
     blocking_modal_count: blockingModals.length,
     blocking_modal_labels: blockingModals.map((modal) => compactText(modal?.label)).filter(Boolean),
@@ -257,7 +281,7 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
         },
         blocking_modals: [],
         loading_shell: false,
-      };
+        };
     }
 
     function compactText(value) {
@@ -281,6 +305,15 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
     function getText(el) {
       return compactText(el.getAttribute('aria-label') || el.textContent || el.value || '');
     }
+
+    const bodyText = compactText(document.body?.innerText);
+    const hasThreadPromptBodyText = bodyText.includes('按enter键发送')
+      || bodyText.includes('发送消息')
+      || bodyText.includes('发消息')
+      || bodyText.includes('输入消息');
+    const hasExactLoadingShellBodyText = bodyText.includes('加载中，请稍候')
+      || (bodyText.includes('加载中') && bodyText.includes('请稍候'))
+      || bodyText.includes('正在加载');
 
     function isSelected(el) {
       return el.getAttribute('aria-selected') === 'true'
@@ -325,9 +358,27 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
       const visible = candidates.find(isVisible);
       if (!visible) return null;
       const draftText = compactText('value' in visible ? visible.value : visible.textContent);
-      const kind = visible.matches('[contenteditable="true"], [role="textbox"]') ? 'chat_composer' : 'chat_composer';
+      const hintText = compactText([
+        visible.getAttribute('placeholder'),
+        visible.getAttribute('aria-label'),
+        visible.getAttribute('title'),
+      ].filter(Boolean).join(' ')).toLowerCase();
+      const messageHints = ['输入消息', '发消息', '发送消息', '回复', '说点什么', '写点什么', '输入内容', '按enter键发送', '聊天'];
+      const hasHintText = messageHints.some((hint) => hintText.includes(hint));
+      const hasPromptAndSend = (
+        hasThreadPromptBodyText
+        && [...document.querySelectorAll('button, [role="button"], input[type="submit"], input[type="button"]')]
+          .filter(isVisible)
+          .some((el) => {
+            const label = normalizeLabel(getText(el));
+            return label.includes('发送') || label.includes('send') || label.includes('回复') || label.includes('提交');
+          })
+      );
+      if (!hasHintText && !hasPromptAndSend) {
+        return null;
+      }
       return {
-        kind,
+        kind: 'chat_composer',
         hint_id: getHintId(visible),
         draft_present: draftText.length > 0,
         draft_text: draftText,
@@ -371,7 +422,6 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
         .filter(Boolean);
     }
 
-    const bodyText = compactText(document.body?.innerText);
     const live_items = [...document.querySelectorAll('li, [role="option"], [role="row"], [role="treeitem"], [data-list-item], [data-thread-item], [data-conversation-item]')]
       .filter(isWorkspaceItemCandidate)
       .map(readLiveItem)
@@ -398,8 +448,10 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
     const composer = readComposer();
     const action_controls = readActionControls();
     const blocking_modals = readBlockingModals();
-    const loading_shell = /加载中|请稍候|loading|please wait/i.test(bodyText)
-      || document.querySelector('[aria-busy="true"], .loading, .skeleton, .spinner') !== null;
+    const loadingIndicator = [...document.querySelectorAll('[aria-busy="true"], .loading, .skeleton, .spinner')]
+      .find(isVisible);
+    const loading_shell = !!(hasExactLoadingShellBodyText
+      || (loadingIndicator && /加载中|请稍候|正在加载/.test(bodyText)));
     const outcome_signals = {
       delivered: /已发送|发送成功|delivered|sent/i.test(bodyText),
       composer_cleared: !!composer && composer.draft_present === false,
