@@ -79,6 +79,10 @@ function hasSendActionControl(actionControls) {
   });
 }
 
+function hasEnglishSuccessSignal(text) {
+  return /\b(delivered|sent)\b/i.test(text);
+}
+
 function hasThreadEvidence(snapshot) {
   const bodyText = pickText(snapshot, 'bodyText', 'body_text').toLowerCase();
   const actionControls = getActionControls(snapshot);
@@ -200,7 +204,7 @@ function getRecoveryHint(selectionWindow, liveItems, detailPanel) {
 
 function getOutcomeSignals(snapshot, composer, activeItem, detailAlignment) {
   const bodyText = pickText(snapshot, 'bodyText', 'body_text').toLowerCase();
-  const delivered = bodyText.includes('已发送') || bodyText.includes('发送成功') || bodyText.includes('delivered') || bodyText.includes('sent');
+  const delivered = bodyText.includes('已发送') || bodyText.includes('发送成功') || hasEnglishSuccessSignal(bodyText);
   const composerCleared = delivered;
   const activeItemStable = detailAlignment !== undefined
     ? detailAlignment === 'aligned'
@@ -453,8 +457,8 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
     const loading_shell = !!(hasExactLoadingShellBodyText
       || (loadingIndicator && /加载中|请稍候|正在加载/.test(bodyText)));
     const outcome_signals = {
-      delivered: /已发送|发送成功|delivered|sent/i.test(bodyText),
-      composer_cleared: /已发送|发送成功|delivered|sent/i.test(bodyText),
+      delivered: /已发送|发送成功/i.test(bodyText) || hasEnglishSuccessSignal(bodyText),
+      composer_cleared: /已发送|发送成功/i.test(bodyText) || hasEnglishSuccessSignal(bodyText),
       active_item_stable: !!active_item && detail_alignment === 'aligned' && selection_window === 'visible',
     };
 

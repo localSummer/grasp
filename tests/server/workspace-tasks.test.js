@@ -265,3 +265,46 @@ test('collectVisibleWorkspaceSnapshot captures a stable thread surface shape', a
   assert.equal(snapshot.composer.kind, 'chat_composer');
   assert.equal(snapshot.detail_alignment, 'aligned');
 });
+
+test('summarizeWorkspaceSnapshot does not treat consent or present as delivered', () => {
+  const consentSummary = summarizeWorkspaceSnapshot({
+    bodyText: 'consent required',
+    composer: { kind: 'chat_composer', draft_present: false },
+    blocking_modals: [],
+    loading_shell: false,
+  });
+
+  const presentSummary = summarizeWorkspaceSnapshot({
+    bodyText: 'present in workspace',
+    composer: { kind: 'chat_composer', draft_present: false },
+    blocking_modals: [],
+    loading_shell: false,
+  });
+
+  assert.equal(consentSummary.outcome_signals.delivered, false);
+  assert.equal(consentSummary.outcome_signals.composer_cleared, false);
+  assert.equal(presentSummary.outcome_signals.delivered, false);
+  assert.equal(presentSummary.outcome_signals.composer_cleared, false);
+});
+
+test('summarizeWorkspaceSnapshot keeps empty composer cleared state conservative', () => {
+  const summary = summarizeWorkspaceSnapshot({
+    composer: { kind: 'chat_composer', draft_present: false, draft_text: '' },
+    blocking_modals: [],
+    loading_shell: false,
+  });
+
+  assert.equal(summary.outcome_signals.composer_cleared, false);
+});
+
+test('summarizeWorkspaceSnapshot keeps selection window not_found with only raw active item', () => {
+  const summary = summarizeWorkspaceSnapshot({
+    workspace_surface: 'thread',
+    active_item: { label: '李女士', normalized_label: '李女士', hint_id: 'L1', selected: true },
+    composer: { kind: 'chat_composer', draft_present: false },
+    blocking_modals: [],
+    loading_shell: false,
+  });
+
+  assert.equal(summary.selection_window, 'not_found');
+});
