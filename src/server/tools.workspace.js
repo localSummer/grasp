@@ -47,6 +47,16 @@ function getActiveItem(snapshot) {
   return pick(snapshot, 'activeItem', 'active_item', null);
 }
 
+function getSendLikeActionControls(snapshot) {
+  return getActionControls(snapshot).filter((control) => {
+    const label = String(control?.label ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+    return label.includes('发送')
+      || label.includes('send')
+      || label.includes('回复')
+      || label.includes('提交');
+  });
+}
+
 function isActiveItemStable(snapshot, summary) {
   if (summary?.outcome_signals?.active_item_stable === true) {
     return true;
@@ -59,10 +69,70 @@ function isActiveItemStable(snapshot, summary) {
   return false;
 }
 
+function toPublicLiveItem(item) {
+  return {
+    label: String(item?.label ?? '').replace(/\s+/g, ' ').trim(),
+    selected: item?.selected === true,
+  };
+}
+
+function toPublicActiveItem(item) {
+  if (!item) return null;
+  return {
+    label: String(item?.label ?? '').replace(/\s+/g, ' ').trim(),
+  };
+}
+
+function toPublicComposer(composer) {
+  if (!composer) return null;
+  return {
+    kind: composer.kind ?? 'chat_composer',
+    draft_present: composer?.draft_present === true,
+  };
+}
+
+function toPublicActionControl(control) {
+  return {
+    label: String(control?.label ?? '').replace(/\s+/g, ' ').trim(),
+    action_kind: control?.action_kind ?? 'action',
+  };
+}
+
+function toPublicBlockingModal(modal) {
+  return {
+    label: String(modal?.label ?? '').replace(/\s+/g, ' ').trim(),
+  };
+}
+
+function toPublicWorkspaceSummary(summary, snapshot) {
+  const blockingModalLabels = Array.isArray(summary?.blocking_modal_labels)
+    ? summary.blocking_modal_labels
+    : getBlockingModals(snapshot)
+        .map((modal) => String(modal?.label ?? '').replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+
+  return {
+    active_item_label: summary?.active_item_label ?? null,
+    draft_present: summary?.draft_present === true,
+    loading_shell: summary?.loading_shell === true,
+    blocking_modal_count: summary?.blocking_modal_count ?? blockingModalLabels.length,
+    blocking_modal_labels: blockingModalLabels,
+    detail_alignment: summary?.detail_alignment ?? 'unknown',
+    selection_window: summary?.selection_window ?? 'not_found',
+    recovery_hint: summary?.recovery_hint ?? null,
+    summary: summary?.summary ?? 'unknown',
+  };
+}
+
 function getWorkspaceNextAction(snapshot) {
   const summary = pick(snapshot, 'summary', 'summary', null);
   const loadingShell = getLoadingShell(snapshot) || summary?.loading_shell === true;
   if (loadingShell) {
+    return 'workspace_inspect';
+  }
+
+  const blockingModals = getBlockingModals(snapshot);
+  if (blockingModals.length > 0) {
     return 'workspace_inspect';
   }
 
@@ -71,9 +141,14 @@ function getWorkspaceNextAction(snapshot) {
   const composer = getComposer(snapshot);
   const activeItemStable = isActiveItemStable(snapshot, summary);
   const draftPresent = composer?.draft_present === true || summary?.draft_present === true;
+  const sendLikeControls = getSendLikeActionControls(snapshot);
 
   if (!activeItem && liveItems.length > 0) {
     return 'select_live_item';
+  }
+
+  if (composer && activeItemStable && sendLikeControls.length === 0) {
+    return 'workspace_inspect';
   }
 
   if (composer && activeItemStable && draftPresent) {
@@ -96,17 +171,17 @@ function buildWorkspaceSnapshotView(snapshot) {
   const workspaceSurface = snapshot.workspace_surface ?? snapshot.workspaceSurface ?? workspaceSummary.workspace_surface;
 
   return {
-    workspaceSummary,
+    workspaceSummary: toPublicWorkspaceSummary(workspaceSummary, snapshot),
     workspaceSurface,
     workspace: {
       workspace_surface: workspaceSurface,
-      live_items: getLiveItems(snapshot),
-      active_item: getActiveItem(snapshot),
-      composer: getComposer(snapshot),
-      action_controls: getActionControls(snapshot),
-      blocking_modals: getBlockingModals(snapshot),
+      live_items: getLiveItems(snapshot).map(toPublicLiveItem),
+      active_item: toPublicActiveItem(getActiveItem(snapshot)),
+      composer: toPublicComposer(getComposer(snapshot)),
+      action_controls: getActionControls(snapshot).map(toPublicActionControl),
+      blocking_modals: getBlockingModals(snapshot).map(toPublicBlockingModal),
       loading_shell: getLoadingShell(snapshot),
-      summary: workspaceSummary,
+      summary: toPublicWorkspaceSummary(workspaceSummary, snapshot),
     },
   };
 }
@@ -130,6 +205,7 @@ function registerWorkspaceActionTool(server, state, deps, toolName, actionKind) 
   const getPage = deps.getActivePage ?? getActivePage;
   const syncState = deps.syncPageState ?? syncPageState;
   const collectSnapshot = deps.collectVisibleWorkspaceSnapshot ?? collectVisibleWorkspaceSnapshot;
+  const actionDependency = deps[toolName === 'select_live_item' ? 'selectLiveItem' : toolName === 'draft_action' ? 'draftAction' : 'executeAction'];
 
   server.registerTool(
     toolName,
@@ -139,9 +215,19 @@ function registerWorkspaceActionTool(server, state, deps, toolName, actionKind) 
     },
     async () => {
       const page = await getPage();
-      const { pageInfo, workspace, workspaceSummary, workspaceSurface } = await loadWorkspacePageContext(page, state, syncState, collectSnapshot);
+      const { pageInfo, snapshot, workspace, workspaceSummary, workspaceSurface } = await loadWorkspacePageContext(page, state, syncState, collectSnapshot);
       const status = getWorkspaceStatus(state);
-      const continuationAction = status === 'direct' ? actionKind : 'request_handoff';
+      const continuationAction = status === 'direct' ? 'workspace_inspect' : 'request_handoff';
+
+      if (status === 'direct' && typeof actionDependency === 'function') {
+        await actionDependency({
+          page,
+          snapshot,
+          workspace,
+          workspaceSummary,
+          workspaceSurface,
+        });
+      }
 
       return buildGatewayResponse({
         status,
