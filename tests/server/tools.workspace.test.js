@@ -533,6 +533,74 @@ test('execute_action exposes unresolved and failed responses without leaking int
   }
 });
 
+test('execute_action uses refreshed state when the action changes gateway status', async () => {
+  const calls = [];
+  const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+  const state = {
+    pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+    handoff: { state: 'idle' },
+  };
+
+  registerWorkspaceTools(server, state, {
+    getActivePage: async () => ({ title: async () => 'BOSS直聘', url: () => 'https://www.zhipin.com/web/geek/chat?id=1' }),
+    syncPageState: async () => undefined,
+    collectVisibleWorkspaceSnapshot: async () => ({
+      workspace_surface: 'thread',
+      live_items: [{ label: '李女士', selected: true }],
+      active_item: { label: '李女士' },
+      composer: { kind: 'chat_composer', draft_present: true },
+      action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+      blocking_modals: [],
+      loading_shell: false,
+      summary: { active_item_label: '李女士', draft_present: true, loading_shell: false },
+    }),
+    executeWorkspaceAction: async () => {
+      state.pageState.riskGateDetected = true;
+      return {
+        status: 'success',
+        blocked: false,
+        executed: true,
+        reason: null,
+        unresolved: null,
+        failure: null,
+        verification: { delivered: true, composer_cleared: true, active_item_stable: true },
+        action: { kind: 'execute_action', status: 'executed' },
+        snapshot: {
+          workspace_surface: 'thread',
+          live_items: [{ label: '李女士', selected: true }],
+          active_item: { label: '李女士' },
+          composer: { kind: 'chat_composer', draft_present: false },
+          action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+          blocking_modals: [],
+          loading_shell: false,
+          summary: { active_item_label: '李女士', draft_present: false, loading_shell: false },
+        },
+        workspace: {
+          workspace_surface: 'thread',
+          live_items: [{ label: '李女士', selected: true }],
+          active_item: { label: '李女士' },
+          composer: { kind: 'chat_composer', draft_present: false },
+          action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+          blocking_modals: [],
+          loading_shell: false,
+          summary: { active_item_label: '李女士', draft_present: false, loading_shell: false },
+        },
+        summary: 'Workspace thread • 李女士',
+      };
+    },
+  });
+
+  const result = await calls.find((entry) => entry.name === 'execute_action').handler({
+    action: 'send',
+    mode: 'confirm',
+    confirmation: 'EXECUTE',
+  });
+
+  assert.equal(result.meta.status, 'gated');
+  assert.equal(result.meta.continuation.suggested_next_action, 'request_handoff');
+  assert.equal(result.meta.result.status, 'success');
+});
+
 test('select_live_item exposes unresolved reasons in the public response', async () => {
   const cases = [
     {

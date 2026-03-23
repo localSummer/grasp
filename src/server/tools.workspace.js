@@ -481,8 +481,6 @@ function registerWorkspaceExecuteActionTool(server, state, deps) {
     async ({ action = 'send', mode = 'preview', confirmation } = {}) => {
       const page = await getPage();
       const { pageInfo, snapshot, workspace, workspaceSummary, workspaceSurface } = await loadWorkspacePageContext(page, state, syncState, collectSnapshot);
-      const status = getWorkspaceStatus(state);
-      const continuationAction = status === 'direct' ? 'workspace_inspect' : 'request_handoff';
       const executeResult = await actionExecutor({
         state,
         page,
@@ -500,15 +498,18 @@ function registerWorkspaceExecuteActionTool(server, state, deps) {
         mode,
         confirmation,
       });
-      const refreshedSnapshot = executeResult.snapshot ?? snapshot;
-      const refreshedView = buildWorkspaceSnapshotView(refreshedSnapshot);
+      await syncState(page, state, { force: true });
+      const finalSnapshot = await collectSnapshot(page, state);
+      const finalView = buildWorkspaceSnapshotView(finalSnapshot);
+      const finalStatus = getWorkspaceStatus(state);
+      const continuationAction = finalStatus === 'direct' ? 'workspace_inspect' : 'request_handoff';
       const pageInfoAfter = {
         title: await page.title(),
         url: page.url(),
       };
 
       return buildGatewayResponse({
-        status,
+        status: finalStatus,
         page: toGatewayPage(pageInfoAfter, state),
         result: {
           task_kind: 'workspace',
@@ -523,16 +524,16 @@ function registerWorkspaceExecuteActionTool(server, state, deps) {
             kind: 'execute_action',
             status: executeResult.action?.status ?? (executeResult.status === 'success' ? 'executed' : executeResult.status ?? 'blocked'),
           },
-          snapshot: refreshedView.workspace,
-          workspace: refreshedView.workspace,
-          summary: `Workspace ${refreshedView.workspaceSurface} • ${refreshedView.workspaceSummary.active_item_label ?? 'no active item'}`,
+          snapshot: finalView.workspace,
+          workspace: finalView.workspace,
+          summary: `Workspace ${finalView.workspaceSurface} • ${finalView.workspaceSummary.active_item_label ?? 'no active item'}`,
         },
         continuation: getWorkspaceContinuation(state, continuationAction),
         evidence: {
-          workspace_surface: refreshedView.workspaceSurface,
-          active_item_label: refreshedView.workspaceSummary.active_item_label ?? null,
-          loading_shell: refreshedView.workspaceSummary.loading_shell ?? false,
-          blocking_modal_count: refreshedView.workspaceSummary.blocking_modal_count ?? 0,
+          workspace_surface: finalView.workspaceSurface,
+          active_item_label: finalView.workspaceSummary.active_item_label ?? null,
+          loading_shell: finalView.workspaceSummary.loading_shell ?? false,
+          blocking_modal_count: finalView.workspaceSummary.blocking_modal_count ?? 0,
           blocked: executeResult.blocked === true,
           executed: executeResult.executed === true,
           reason: executeResult.reason ?? null,

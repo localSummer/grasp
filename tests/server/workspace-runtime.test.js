@@ -677,8 +677,13 @@ test('executeWorkspaceAction preview blocks without clicking', async () => {
     },
     snapshot: {
       workspace_surface: 'thread',
+      loading_shell: false,
+      blocking_modals: [],
       action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
       composer: { kind: 'chat_composer', draft_present: true },
+      live_items: [{ label: '李女士', selected: true }],
+      active_item: { label: '李女士' },
+      summary: { active_item_label: '李女士', draft_present: true, loading_shell: false, active_item_stable: true },
     },
     executeGuardedAction: async () => {
       executed = true;
@@ -705,8 +710,13 @@ test('executeWorkspaceAction confirm requires EXECUTE before clicking', async ()
     },
     snapshot: {
       workspace_surface: 'thread',
+      loading_shell: false,
+      blocking_modals: [],
       action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
       composer: { kind: 'chat_composer', draft_present: true },
+      live_items: [{ label: '李女士', selected: true }],
+      active_item: { label: '李女士' },
+      summary: { active_item_label: '李女士', draft_present: true, loading_shell: false, active_item_stable: true },
     },
     executeGuardedAction: async () => {
       executed = true;
@@ -723,6 +733,90 @@ test('executeWorkspaceAction confirm requires EXECUTE before clicking', async ()
   assert.equal(result.action.status, 'blocked');
 });
 
+test('executeWorkspaceAction confirm blocks when workspace is not ready to execute', async () => {
+  const cases = [
+    {
+      name: 'loading_shell',
+      snapshot: {
+        workspace_surface: 'thread',
+        loading_shell: true,
+        blocking_modals: [],
+        composer: { kind: 'chat_composer', draft_present: true },
+        active_item: { label: '李女士' },
+        live_items: [{ label: '李女士', selected: true }],
+        action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+        summary: { active_item_label: '李女士', draft_present: true, loading_shell: true },
+      },
+    },
+    {
+      name: 'blocking_modal',
+      snapshot: {
+        workspace_surface: 'thread',
+        loading_shell: false,
+        blocking_modals: [{ label: '权限提示' }],
+        composer: { kind: 'chat_composer', draft_present: true },
+        active_item: { label: '李女士' },
+        live_items: [{ label: '李女士', selected: true }],
+        action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+        summary: { active_item_label: '李女士', draft_present: true, loading_shell: false },
+      },
+    },
+    {
+      name: 'missing_draft',
+      snapshot: {
+        workspace_surface: 'thread',
+        loading_shell: false,
+        blocking_modals: [],
+        composer: { kind: 'chat_composer', draft_present: false },
+        active_item: { label: '李女士' },
+        live_items: [{ label: '李女士', selected: true }],
+        action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+        summary: { active_item_label: '李女士', draft_present: false, loading_shell: false },
+      },
+    },
+    {
+      name: 'unstable_active_item',
+      snapshot: {
+        workspace_surface: 'thread',
+        loading_shell: false,
+        blocking_modals: [],
+        composer: { kind: 'chat_composer', draft_present: true },
+        active_item: { label: '李女士' },
+        live_items: [{ label: '李女士', selected: true }],
+        action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+        summary: {
+          active_item_label: '李女士',
+          draft_present: true,
+          loading_shell: false,
+          outcome_signals: { active_item_stable: false },
+        },
+      },
+    },
+  ];
+
+  for (const testCase of cases) {
+    let clicked = false;
+
+    const result = await executeWorkspaceAction({
+      state: {
+        pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+        handoff: { state: 'idle' },
+      },
+      snapshot: testCase.snapshot,
+      clickByHintId: async () => {
+        clicked = true;
+        return { ok: true };
+      },
+      executeGuardedAction: async () => ({ ok: true }),
+      verifyActionOutcome: async () => ({ ok: true, evidence: { generic: true } }),
+    }, { action: 'send', mode: 'confirm', confirmation: 'EXECUTE' });
+
+    assert.equal(clicked, false, testCase.name);
+    assert.notEqual(result.action.status, 'executed', testCase.name);
+    assert.equal(result.blocked === true || result.status === 'unresolved', true, testCase.name);
+  }
+});
+
 test('executeWorkspaceAction confirm with EXECUTE returns success when outcome is verified', async () => {
   let executed = false;
 
@@ -733,11 +827,13 @@ test('executeWorkspaceAction confirm with EXECUTE returns success when outcome i
     },
     snapshot: {
       workspace_surface: 'thread',
+      loading_shell: false,
+      blocking_modals: [],
       action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
       composer: { kind: 'chat_composer', draft_present: true },
       live_items: [{ label: '李女士', selected: true }],
       active_item: { label: '李女士' },
-      summary: { active_item_label: '李女士', draft_present: false, loading_shell: false },
+      summary: { active_item_label: '李女士', draft_present: true, loading_shell: false, active_item_stable: true },
     },
     clickByHintId: async () => ({ ok: true }),
     executeGuardedAction: async ({ execute, verify }) => {
@@ -756,7 +852,7 @@ test('executeWorkspaceAction confirm with EXECUTE returns success when outcome i
             composer_cleared: true,
             active_item_stable: true,
           },
-          summary: { active_item_label: '李女士', draft_present: false, loading_shell: false },
+          summary: { active_item_label: '李女士', draft_present: false, loading_shell: false, active_item_stable: true },
         },
       });
     },
@@ -787,8 +883,13 @@ test('executeWorkspaceAction returns failed when the outcome cannot be verified'
     },
     snapshot: {
       workspace_surface: 'thread',
+      loading_shell: false,
+      blocking_modals: [],
       action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
       composer: { kind: 'chat_composer', draft_present: true },
+      live_items: [{ label: '李女士', selected: true }],
+      active_item: { label: '李女士' },
+      summary: { active_item_label: '李女士', draft_present: true, loading_shell: false, active_item_stable: true },
     },
     clickByHintId: async () => ({ ok: true }),
     executeGuardedAction: async ({ execute, verify }) => {
@@ -807,7 +908,7 @@ test('executeWorkspaceAction returns failed when the outcome cannot be verified'
             composer_cleared: false,
             active_item_stable: false,
           },
-          summary: { active_item_label: '李女士', draft_present: true, loading_shell: false },
+          summary: { active_item_label: '李女士', draft_present: true, loading_shell: false, active_item_stable: true },
         },
       });
     },
@@ -830,9 +931,8 @@ test('executeWorkspaceAction returns failed when the outcome cannot be verified'
   assert.equal(result.failure.error_code, 'ACTION_NOT_VERIFIED');
 });
 
-test('executeWorkspaceAction fails when generic verification would succeed but send-specific outcome is absent', async () => {
+test('executeWorkspaceAction fails when only active_item_stable is present without send-specific outcome', async () => {
   let executed = false;
-  let sawHintId = false;
 
   const result = await executeWorkspaceAction({
     state: {
@@ -841,11 +941,13 @@ test('executeWorkspaceAction fails when generic verification would succeed but s
     },
     snapshot: {
       workspace_surface: 'thread',
+      loading_shell: false,
+      blocking_modals: [],
       action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
       composer: { kind: 'chat_composer', draft_present: true },
       live_items: [{ label: '李女士', selected: true }],
       active_item: { label: '李女士' },
-      summary: { active_item_label: '李女士', draft_present: true, loading_shell: false },
+      summary: { active_item_label: '李女士', draft_present: true, loading_shell: false, active_item_stable: true },
     },
     clickByHintId: async () => ({ ok: true }),
     executeGuardedAction: async ({ execute, verify }) => {
@@ -862,31 +964,114 @@ test('executeWorkspaceAction fails when generic verification would succeed but s
           outcome_signals: {
             delivered: false,
             composer_cleared: false,
-            active_item_stable: false,
+            active_item_stable: true,
           },
-          summary: { active_item_label: '李女士', draft_present: true, loading_shell: false },
+          summary: { active_item_label: '李女士', draft_present: true, loading_shell: false, active_item_stable: true },
         },
       });
     },
-    verifyActionOutcome: async (args) => {
-      sawHintId = args.hintId != null;
-      if (args.hintId) {
-        return { ok: true, evidence: { generic: true } };
-      }
-
-      return {
-        ok: false,
-        error_code: 'ACTION_NOT_VERIFIED',
-        retryable: true,
-        suggested_next_step: 'reverify',
-        evidence: { generic: false },
-      };
-    },
+    verifyActionOutcome: async () => ({
+      ok: true,
+      evidence: { generic: true },
+    }),
   }, { action: 'send', mode: 'confirm', confirmation: 'EXECUTE' });
 
   assert.equal(executed, true);
-  assert.equal(sawHintId, false);
   assert.equal(result.status, 'failed');
   assert.equal(result.action.status, 'failed');
   assert.equal(result.failure.error_code, 'ACTION_NOT_VERIFIED');
+});
+
+test('executeWorkspaceAction clicks only the reliable send control and skips label-only controls', async () => {
+  const clicked = [];
+
+  const result = await executeWorkspaceAction({
+    state: {
+      pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+      handoff: { state: 'idle' },
+    },
+    snapshot: {
+      workspace_surface: 'thread',
+      loading_shell: false,
+      blocking_modals: [],
+      composer: { kind: 'chat_composer', draft_present: true },
+      live_items: [{ label: '李女士', selected: true }],
+      active_item: { label: '李女士' },
+      action_controls: [
+        { label: '发送', action_kind: 'button', hint_id: 'B0' },
+        { label: '提交', action_kind: 'button', hint_id: 'B2' },
+        { label: '发送', action_kind: 'send', hint_id: 'B1' },
+      ],
+      summary: {
+        active_item_label: '李女士',
+        draft_present: true,
+        loading_shell: false,
+        outcome_signals: { active_item_stable: true },
+      },
+    },
+    clickByHintId: async (_page, hintId) => {
+      clicked.push(hintId);
+      return { ok: true };
+    },
+    executeGuardedAction: async ({ execute, verify }) => {
+      const executionResult = await execute();
+      return verify({
+        executionResult,
+        snapshot: {
+          workspace_surface: 'thread',
+          loading_shell: false,
+          blocking_modals: [],
+          composer: { kind: 'chat_composer', draft_present: false },
+          live_items: [{ label: '李女士', selected: true }],
+          active_item: { label: '李女士' },
+          outcome_signals: {
+            delivered: true,
+            composer_cleared: true,
+            active_item_stable: true,
+          },
+          summary: {
+            active_item_label: '李女士',
+            draft_present: false,
+            loading_shell: false,
+            outcome_signals: { active_item_stable: true },
+          },
+        },
+      });
+    },
+    verifyActionOutcome: async () => ({ ok: true, evidence: { delivered: true } }),
+  }, { action: 'send', mode: 'confirm', confirmation: 'EXECUTE' });
+
+  assert.deepEqual(clicked, ['B1']);
+  assert.equal(result.status, 'success');
+
+  const unresolved = await executeWorkspaceAction({
+    state: {
+      pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+      handoff: { state: 'idle' },
+    },
+    snapshot: {
+      workspace_surface: 'thread',
+      loading_shell: false,
+      blocking_modals: [],
+      composer: { kind: 'chat_composer', draft_present: true },
+      live_items: [{ label: '李女士', selected: true }],
+      active_item: { label: '李女士' },
+      action_controls: [
+        { label: '发送', action_kind: 'button', hint_id: 'B0' },
+        { label: '提交', action_kind: 'button', hint_id: 'B2' },
+      ],
+      summary: {
+        active_item_label: '李女士',
+        draft_present: true,
+        loading_shell: false,
+        outcome_signals: { active_item_stable: true },
+      },
+    },
+    clickByHintId: async () => {
+      throw new Error('should not click');
+    },
+  }, { action: 'send', mode: 'confirm', confirmation: 'EXECUTE' });
+
+  assert.equal(unresolved.status, 'unresolved');
+  assert.equal(unresolved.unresolved.reason, 'no_live_target');
 });

@@ -32,14 +32,33 @@ function getActionControls(snapshot) {
   return Array.isArray(controls) ? controls : [];
 }
 
-function getSendLikeActionControls(snapshot) {
-  return getActionControls(snapshot).filter((control) => {
-    const label = String(control?.label ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
-    return label.includes('发送')
-      || label.includes('send')
-      || label.includes('回复')
-      || label.includes('提交');
-  });
+function getSendActionControls(snapshot) {
+  return getActionControls(snapshot).filter((control) => control?.action_kind === 'send');
+}
+
+function getWorkspaceExecuteSignals(snapshot) {
+  const summary = pick(snapshot, 'summary', 'summary', null) ?? {};
+  const composer = getComposer(snapshot);
+  const blockingModals = pick(snapshot, 'blockingModals', 'blocking_modals', []);
+  const sendControl = getSendActionControls(snapshot)[0] ?? null;
+
+  return {
+    loadingShell: isLoadingShell(snapshot),
+    blockingModalCount: Array.isArray(blockingModals) ? blockingModals.length : 0,
+    draftPresent: composer?.draft_present === true || summary?.draft_present === true,
+    activeItemStable: summary?.outcome_signals?.active_item_stable === true || summary?.active_item_stable === true,
+    sendControl,
+  };
+}
+
+function canExecuteWorkspaceSend(snapshot) {
+  const signals = getWorkspaceExecuteSignals(snapshot);
+
+  return signals.loadingShell === false
+    && signals.blockingModalCount === 0
+    && signals.draftPresent === true
+    && signals.activeItemStable === true
+    && signals.sendControl !== null;
 }
 
 function getWorkspaceSurface(snapshot) {
@@ -958,9 +977,13 @@ export async function executeWorkspaceAction(runtime, options = {}) {
     return buildWorkspaceExecuteUnresolved('unsupported_action', action, [], null, initialSnapshot);
   }
 
-  const sendControl = getSendLikeActionControls(initialSnapshot)[0] ?? null;
-  if (!sendControl || !compactText(sendControl?.hint_id)) {
-    return buildWorkspaceExecuteUnresolved('no_live_target', 'send', sendControl ? [sendControl] : [], 'reinspect_workspace', initialSnapshot);
+  const workspaceExecuteSignals = getWorkspaceExecuteSignals(initialSnapshot);
+  if (!workspaceExecuteSignals.sendControl || !compactText(workspaceExecuteSignals.sendControl?.hint_id)) {
+    return buildWorkspaceExecuteUnresolved('no_live_target', 'send', workspaceExecuteSignals.sendControl ? [workspaceExecuteSignals.sendControl] : [], 'reinspect_workspace', initialSnapshot);
+  }
+
+  if (!canExecuteWorkspaceSend(initialSnapshot)) {
+    return buildWorkspaceExecuteBlocked('not_ready_to_execute', 'send', initialSnapshot);
   }
 
   if (mode === 'preview') {
@@ -980,8 +1003,8 @@ export async function executeWorkspaceAction(runtime, options = {}) {
   const execution = await execute({
     runtime,
     execute: async () => {
-      await click(page, sendControl.hint_id, { rebuildHints });
-      return { control: sendControl };
+      await click(page, workspaceExecuteSignals.sendControl.hint_id, { rebuildHints });
+      return { control: workspaceExecuteSignals.sendControl };
     },
     verify: async ({ snapshot: refreshedSnapshot, executionResult }) => {
       const verification = await verify({
@@ -991,16 +1014,19 @@ export async function executeWorkspaceAction(runtime, options = {}) {
         outcomeSignals: refreshedSnapshot?.outcome_signals ?? null,
         snapshot: refreshedSnapshot,
       });
+      const sendDelivered = refreshedSnapshot?.outcome_signals?.delivered === true;
+      const composerCleared = refreshedSnapshot?.outcome_signals?.composer_cleared === true;
+      const sendSucceeded = sendDelivered || composerCleared;
 
-      if (!verification.ok) {
+      if (!sendSucceeded) {
         return {
           ok: false,
           failure: {
-            error_code: verification.error_code ?? 'ACTION_NOT_VERIFIED',
-            retryable: verification.retryable ?? true,
-            suggested_next_step: verification.suggested_next_step ?? 'reverify',
+            error_code: verification?.error_code ?? 'ACTION_NOT_VERIFIED',
+            retryable: verification?.retryable ?? true,
+            suggested_next_step: verification?.suggested_next_step ?? 'reverify',
           },
-          evidence: verification.evidence ?? {
+          evidence: verification?.evidence ?? {
             kind: 'execute_action',
             target: 'send',
             executionResult,
@@ -1010,14 +1036,14 @@ export async function executeWorkspaceAction(runtime, options = {}) {
 
       return {
         ok: true,
-        evidence: verification.evidence ?? {
+        evidence: verification?.evidence ?? {
           kind: 'execute_action',
           target: 'send',
           executionResult,
         },
         verification: {
-          delivered: refreshedSnapshot?.outcome_signals?.delivered === true,
-          composer_cleared: refreshedSnapshot?.outcome_signals?.composer_cleared === true,
+          delivered: sendDelivered,
+          composer_cleared: composerCleared,
           active_item_stable: refreshedSnapshot?.outcome_signals?.active_item_stable === true,
         },
       };
