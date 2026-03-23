@@ -519,3 +519,97 @@ test('select_live_item exposes unresolved reasons in the public response', async
     assert.equal(result.meta.result.selection_evidence.recovery_hint, result.meta.result.unresolved.recovery_hint, testCase.name);
   }
 });
+
+test('draft_action exposes public-safe unresolved and failed responses', async () => {
+  const cases = [
+    {
+      name: 'unresolved',
+      draftResult: {
+        status: 'unresolved',
+        unresolved: {
+          reason: 'loading_shell',
+          requested_label: 'composer',
+          matches: [{ label: '消息输入框', hint_id: 'C1' }],
+        },
+        snapshot: {
+          workspace_surface: 'thread',
+          live_items: [{ label: '李女士', selected: true, hint_id: 'L1', normalized_label: '李女士' }],
+          active_item: { label: '李女士', hint_id: 'L1', normalized_label: '李女士', selected: true },
+          composer: { kind: 'chat_composer', hint_id: 'C1', draft_present: false, draft_text: 'internal' },
+          action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+          blocking_modals: [],
+          loading_shell: true,
+          summary: { active_item_label: '李女士', draft_present: false, loading_shell: true },
+        },
+      },
+    },
+    {
+      name: 'failed',
+      draftResult: {
+        status: 'failed',
+        error_code: 'ACTION_NOT_VERIFIED',
+        retryable: true,
+        suggested_next_step: 'reverify',
+        snapshot: {
+          workspace_surface: 'thread',
+          live_items: [{ label: '李女士', selected: true, hint_id: 'L1', normalized_label: '李女士' }],
+          active_item: { label: '李女士', hint_id: 'L1', normalized_label: '李女士', selected: true },
+          composer: { kind: 'chat_composer', hint_id: 'C1', draft_present: false, draft_text: 'internal' },
+          action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+          blocking_modals: [],
+          loading_shell: false,
+          summary: { active_item_label: '李女士', draft_present: false, loading_shell: false },
+        },
+      },
+    },
+  ];
+
+  for (const testCase of cases) {
+    const calls = [];
+    const server = { registerTool(name, spec, handler) { calls.push({ name, spec, handler }); } };
+    const state = {
+      pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+      handoff: { state: 'idle' },
+    };
+
+    registerWorkspaceTools(server, state, {
+      getActivePage: async () => ({ title: async () => 'BOSS直聘', url: () => 'https://www.zhipin.com/web/geek/chat?id=1' }),
+      syncPageState: async () => undefined,
+      collectVisibleWorkspaceSnapshot: async () => ({
+        workspace_surface: 'thread',
+        live_items: [{ label: '李女士', selected: true, hint_id: 'L1', normalized_label: '李女士' }],
+        active_item: { label: '李女士', hint_id: 'L1', normalized_label: '李女士', selected: true },
+        composer: { kind: 'chat_composer', hint_id: 'C1', draft_present: false, draft_text: 'internal' },
+        action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+        blocking_modals: [],
+        loading_shell: false,
+        summary: { active_item_label: '李女士', draft_present: false, loading_shell: false },
+      }),
+      draftWorkspaceAction: async () => testCase.draftResult,
+    });
+
+    const tool = calls.find((entry) => entry.name === 'draft_action');
+    assert.equal(tool.spec.inputSchema.text._def.description, 'Draft text to write into the current workspace composer');
+
+    const result = await tool.handler({ text: '你好' });
+
+    assert.equal(result.meta.result.status, testCase.draftResult.status, testCase.name);
+    assert.equal(result.meta.result.snapshot.composer?.hint_id, undefined, testCase.name);
+    assert.equal(result.meta.result.snapshot.composer?.draft_text, undefined, testCase.name);
+    assert.equal(result.meta.result.snapshot.live_items[0].hint_id, undefined, testCase.name);
+    assert.equal(result.meta.result.snapshot.live_items[0].normalized_label, undefined, testCase.name);
+
+    if (testCase.name === 'unresolved') {
+      assert.equal(result.meta.result.unresolved.reason, 'loading_shell');
+      assert.equal(result.meta.result.unresolved.matches, undefined);
+      assert.equal(result.meta.result.failure, null);
+    } else {
+      assert.deepEqual(result.meta.result.failure, {
+        error_code: 'ACTION_NOT_VERIFIED',
+        retryable: true,
+        suggested_next_step: 'reverify',
+      });
+      assert.equal(result.meta.result.unresolved, null);
+    }
+  }
+});

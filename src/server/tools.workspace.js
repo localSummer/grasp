@@ -154,6 +154,32 @@ function toPublicDraftEvidence(draftEvidence) {
   };
 }
 
+function toPublicDraftUnresolved(unresolved) {
+  if (!unresolved) return null;
+
+  return {
+    reason: unresolved.reason ?? 'unknown',
+    requested_label: String(unresolved.requested_label ?? '').replace(/\s+/g, ' ').trim(),
+    recovery_hint: unresolved.recovery_hint ?? null,
+  };
+}
+
+function toPublicDraftFailure(result) {
+  const errorCode = result?.error_code ?? null;
+  const retryable = result?.retryable;
+  const suggestedNextStep = result?.suggested_next_step ?? null;
+
+  if (!errorCode && retryable === undefined && suggestedNextStep == null) {
+    return null;
+  }
+
+  return {
+    error_code: errorCode,
+    retryable: retryable ?? null,
+    suggested_next_step: suggestedNextStep,
+  };
+}
+
 function toPublicWorkspaceSummary(summary, snapshot) {
   const blockingModalLabels = Array.isArray(summary?.blocking_modal_labels)
     ? summary.blocking_modal_labels
@@ -331,15 +357,17 @@ function registerWorkspaceDraftActionTool(server, state, deps) {
         return buildGatewayResponse({
           status,
           page: toGatewayPage(pageInfo, state),
-          result: {
-            task_kind: 'workspace',
+        result: {
+          task_kind: 'workspace',
+          status: 'blocked',
+          draft_evidence: null,
+          unresolved: null,
+          failure: null,
+          action: {
+            kind: 'draft_action',
             status: 'blocked',
-            draft_evidence: null,
-            action: {
-              kind: 'draft_action',
-              status: 'blocked',
-            },
-            snapshot: workspace,
+          },
+          snapshot: workspace,
             workspace,
             summary: `Workspace ${workspaceSurface} • ${workspaceSummary.active_item_label ?? 'no active item'}`,
           },
@@ -369,6 +397,8 @@ function registerWorkspaceDraftActionTool(server, state, deps) {
         url: page.url(),
       };
       const publicDraftEvidence = toPublicDraftEvidence(draftResult.draft_evidence);
+      const publicUnresolved = toPublicDraftUnresolved(draftResult.unresolved);
+      const publicFailure = toPublicDraftFailure(draftResult);
       const publicSnapshot = refreshedView.workspace;
 
       return buildGatewayResponse({
@@ -378,6 +408,8 @@ function registerWorkspaceDraftActionTool(server, state, deps) {
           task_kind: 'workspace',
           status: draftResult.status ?? 'unresolved',
           draft_evidence: publicDraftEvidence,
+          unresolved: publicUnresolved,
+          failure: publicFailure,
           action: {
             kind: 'draft_action',
             status: draftResult.status ?? 'unresolved',
@@ -393,6 +425,7 @@ function registerWorkspaceDraftActionTool(server, state, deps) {
           loading_shell: refreshedView.workspaceSummary.loading_shell ?? false,
           blocking_modal_count: refreshedView.workspaceSummary.blocking_modal_count ?? 0,
           draft_evidence: publicDraftEvidence,
+          failure: publicFailure,
         },
       });
     }

@@ -757,14 +757,15 @@ export async function draftIntoComposer(runtime, text, options = {}) {
 
 export async function draftWorkspaceAction(runtime, text, options = {}) {
   const state = runtime?.state ?? null;
-  const status = getWorkspaceStatus(state ?? {});
+  const gatewayStatus = getWorkspaceStatus(state ?? {});
   const initialSnapshot = normalizeWorkspaceSnapshot(runtime?.snapshot ?? runtime ?? {});
 
-  if (status !== 'direct') {
+  if (gatewayStatus !== 'direct') {
     const composer = resolveComposer(initialSnapshot).composer ?? getComposer(initialSnapshot);
 
     return {
-      status,
+      status: 'blocked',
+      reason: gatewayStatus,
       draft_present: initialSnapshot?.composer?.draft_present === true,
       snapshot: initialSnapshot,
       draft_evidence: {
@@ -811,43 +812,38 @@ export async function draftWorkspaceAction(runtime, text, options = {}) {
     : draftIntoComposer;
 
   const draftResult = await draft(runtime, text, options);
+  const resultSnapshot = normalizeWorkspaceSnapshot(draftResult?.snapshot ?? runtime?.snapshot ?? initialSnapshot);
+
+  if (runtime && typeof runtime === 'object') {
+    runtime.snapshot = resultSnapshot;
+  }
+
   if (!draftResult?.ok) {
+    const resultStatus = draftResult?.unresolved ? 'unresolved' : 'failed';
+
     return {
-      status: 'unresolved',
-      draft_present: initialSnapshot?.composer?.draft_present === true,
+      status: resultStatus,
+      draft_present: resultSnapshot?.composer?.draft_present === true,
       unresolved: draftResult?.unresolved ?? null,
       error_code: draftResult?.error_code ?? null,
-      retryable: draftResult?.retryable ?? true,
-      suggested_next_step: draftResult?.suggested_next_step ?? 'reverify',
-      snapshot: normalizeWorkspaceSnapshot(draftResult?.snapshot ?? runtime?.snapshot ?? initialSnapshot),
+      retryable: draftResult?.retryable ?? null,
+      suggested_next_step: draftResult?.suggested_next_step ?? null,
+      snapshot: resultSnapshot,
       action: {
         kind: 'draft_action',
-        status: 'unresolved',
+        status: resultStatus,
       },
     };
   }
 
-  const refreshedSnapshot = normalizeWorkspaceSnapshot(
-    typeof runtime?.refreshSnapshot === 'function'
-      ? await runtime.refreshSnapshot()
-      : draftResult.snapshot ?? runtime?.snapshot ?? initialSnapshot,
-  );
-
-  if (typeof runtime?.persistSnapshot === 'function') {
-    await runtime.persistSnapshot(refreshedSnapshot);
-  }
-
-  if (runtime && typeof runtime === 'object') {
-    runtime.snapshot = refreshedSnapshot;
-  }
-
   return {
     status: 'drafted',
-    draft_present: refreshedSnapshot?.composer?.draft_present === true,
-    snapshot: refreshedSnapshot,
+    draft_present: resultSnapshot?.composer?.draft_present === true,
+    snapshot: resultSnapshot,
     draft_evidence: {
       ...createWorkspaceWriteEvidence({ kind: 'draft_action', target: composer.kind ?? 'chat_composer' }),
-      draft_present: refreshedSnapshot?.composer?.draft_present === true,
+      draft_present: resultSnapshot?.composer?.draft_present === true,
+      summary: resultSnapshot?.summary?.summary ?? resultSnapshot?.summary_text ?? null,
     },
     action: {
       kind: 'draft_action',

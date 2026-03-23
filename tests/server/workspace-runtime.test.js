@@ -599,8 +599,9 @@ test('draftIntoComposer returns no_live_target when composer has no hint', async
   assert.equal(result.unresolved.reason, 'no_live_target');
 });
 
-test('draftWorkspaceAction drafts a resolved composer and rebuilds the refreshed snapshot', async () => {
+test('draftWorkspaceAction reuses the fresh snapshot returned by draftIntoComposer without a second refresh', async () => {
   const writes = [];
+  let refreshCalls = 0;
   const result = await draftWorkspaceAction({
     state: {
       pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
@@ -613,18 +614,54 @@ test('draftWorkspaceAction drafts a resolved composer and rebuilds the refreshed
     },
     draftIntoComposer: async (_runtime, text) => {
       writes.push(text);
-      return { ok: true };
+      return {
+        ok: true,
+        snapshot: {
+          workspace_surface: 'composer',
+          loading_shell: false,
+          composer: { kind: 'chat_composer', hint_id: 'C1', draft_present: true, draft_text: '您好，我想咨询一下岗位情况。' },
+        },
+      };
     },
-    refreshSnapshot: async () => ({
-      workspace_surface: 'composer',
-      loading_shell: false,
-      composer: { kind: 'chat_composer', hint_id: 'C1', draft_present: true, draft_text: '您好，我想咨询一下岗位情况。' },
-    }),
+    refreshSnapshot: async () => {
+      refreshCalls += 1;
+      return {
+        workspace_surface: 'composer',
+        loading_shell: false,
+        composer: { kind: 'chat_composer', hint_id: 'C1', draft_present: false, draft_text: '' },
+      };
+    },
   }, '您好，我想咨询一下岗位情况。');
 
   assert.deepEqual(writes, ['您好，我想咨询一下岗位情况。']);
+  assert.equal(refreshCalls, 0);
   assert.equal(result.status, 'drafted');
   assert.equal(result.snapshot.composer.draft_present, true);
   assert.equal(result.draft_evidence.autosave_possible, true);
   assert.equal(result.draft_evidence.draft_present, true);
+});
+
+test('draftWorkspaceAction returns blocked with a gateway reason when the workspace is not direct', async () => {
+  let drafted = false;
+  const result = await draftWorkspaceAction({
+    state: {
+      pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: true },
+      handoff: { state: 'idle' },
+    },
+    snapshot: {
+      workspace_surface: 'thread',
+      loading_shell: false,
+      composer: { kind: 'chat_composer', hint_id: 'C1', draft_present: false },
+    },
+    draftIntoComposer: async () => {
+      drafted = true;
+      return { ok: true };
+    },
+  }, '你好');
+
+  assert.equal(drafted, false);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.reason, 'gated');
+  assert.equal(result.action.status, 'blocked');
+  assert.equal(result.snapshot.composer.draft_present, false);
 });
