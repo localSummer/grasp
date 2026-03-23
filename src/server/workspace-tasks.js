@@ -329,7 +329,7 @@ export function buildWorkspaceVerification(snapshot = {}) {
             ? 'workspace_inspect'
             : draftPresent
               ? (hasReliableSendControl ? 'execute_action' : 'workspace_inspect')
-              : workspaceSurface === 'thread' && hasReliableSendControl
+              : workspaceSurface === 'thread'
                 ? 'draft_action'
                 : 'workspace_inspect';
 
