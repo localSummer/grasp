@@ -85,6 +85,30 @@ function createDomPage({ bodyText = '', queryAllMap = {}, queryMap = {} } = {}) 
   });
 }
 
+function createIsolatedDomPage({ bodyText = '', queryAllMap = {}, queryMap = {} } = {}) {
+  const document = {
+    body: { innerText: bodyText },
+    querySelectorAll: (selector) => queryAllMap[selector] ?? [],
+    querySelector: (selector) => queryMap[selector] ?? null,
+    getElementById: () => null,
+  };
+  const window = {
+    getComputedStyle: () => ({ visibility: 'visible', display: 'block' }),
+  };
+
+  return createFakePage({
+    evaluate: async (fn, ...args) => {
+      const isolatedFn = new Function(
+        'args',
+        'document',
+        'window',
+        `return (${fn.toString()})(...args);`
+      );
+      return isolatedFn(args, document, window);
+    },
+  });
+}
+
 test('classifyWorkspaceSurface prefers loading shell, thread, composer, then list/detail', () => {
   assert.equal(classifyWorkspaceSurface({
     bodyText: '加载中，请稍候',
@@ -265,6 +289,28 @@ test('collectVisibleWorkspaceSnapshot captures a stable thread surface shape', a
   assert.equal(snapshot.action_controls.length, 1);
   assert.equal(snapshot.composer.kind, 'chat_composer');
   assert.equal(snapshot.detail_alignment, 'aligned');
+});
+
+test('collectVisibleWorkspaceSnapshot keeps success signal helpers self-contained in browser context', async () => {
+  const page = createIsolatedDomPage({
+    bodyText: 'Message sent',
+    queryAllMap: {
+      'li, [role="option"], [role="row"], [role="treeitem"], [data-list-item], [data-thread-item], [data-conversation-item]': [],
+      'textarea, input:not([type="hidden"]), [contenteditable="true"], [role="textbox"]': [],
+      'button, [role="button"], input[type="submit"], input[type="button"]': [],
+      '[role="dialog"], [aria-modal="true"], dialog[open]': [],
+      '[aria-busy="true"], .loading, .skeleton, .spinner': [],
+      '[data-detail-panel], [role="complementary"], .detail-panel, aside': [],
+    },
+    queryMap: {
+      '[aria-busy="true"], .loading, .skeleton, .spinner': null,
+    },
+  });
+
+  const snapshot = await collectVisibleWorkspaceSnapshot(page);
+
+  assert.equal(snapshot.outcome_signals.delivered, true);
+  assert.equal(snapshot.outcome_signals.composer_cleared, true);
 });
 
 test('summarizeWorkspaceSnapshot does not treat consent or present as delivered', () => {

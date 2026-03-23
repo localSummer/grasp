@@ -374,6 +374,10 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
       return compactText(value).toLowerCase();
     }
 
+    function hasEnglishSuccessSignal(text) {
+      return /\b(delivered|sent)\b/i.test(text);
+    }
+
     function getHintId(el) {
       return el.getAttribute('data-grasp-id') || null;
     }

@@ -7,6 +7,8 @@ import { syncPageState } from './state.js';
 import { buildWorkspaceVerification, collectVisibleWorkspaceSnapshot, getWorkspaceContinuation, getWorkspaceStatus, summarizeWorkspaceSnapshot } from './workspace-tasks.js';
 import { draftWorkspaceAction, executeWorkspaceAction, selectWorkspaceItem } from './workspace-runtime.js';
 
+const WORKSPACE_ITEM_SELECTOR = 'li, [role="option"], [role="row"], [role="treeitem"], [data-list-item], [data-thread-item], [data-conversation-item]';
+
 function toGatewayPage(page, state) {
   return {
     title: page.title,
@@ -287,6 +289,52 @@ function createWorkspaceRebuildHints(page, state, syncState) {
     await syncState(page, state, { force: true });
     return null;
   };
+}
+
+async function clickWorkspaceItemByLabel(page, requestedLabel) {
+  const point = await page.evaluate(({ selector, requestedLabel: label }) => {
+    function compactText(value) {
+      return String(value ?? '').replace(/\s+/g, ' ').trim();
+    }
+
+    function normalizeLabel(value) {
+      return compactText(value).toLowerCase();
+    }
+
+    function isVisible(el) {
+      const rect = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    }
+
+    function getText(el) {
+      return compactText(el.getAttribute('aria-label') || el.textContent || el.value || '');
+    }
+
+    const normalized = normalizeLabel(label);
+    if (!normalized) return null;
+
+    const target = [...document.querySelectorAll(selector)]
+      .find((el) => isVisible(el) && normalizeLabel(getText(el)) === normalized);
+
+    if (!target) return null;
+
+    const rect = target.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    };
+  }, {
+    selector: WORKSPACE_ITEM_SELECTOR,
+    requestedLabel,
+  });
+
+  if (!point) {
+    return false;
+  }
+
+  await page.mouse.click(point.x, point.y);
+  return true;
 }
 
 async function loadWorkspacePageContext(page, state, syncState, collectSnapshot) {
@@ -658,6 +706,11 @@ export function registerWorkspaceTools(server, state, deps = {}) {
           }
 
           if (!candidate?.hint_id) {
+            const clicked = await clickWorkspaceItemByLabel(page, candidate?.label ?? item);
+            if (clicked) {
+              return { ok: true };
+            }
+
             return {
               ok: false,
               unresolved: {

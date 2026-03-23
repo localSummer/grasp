@@ -783,6 +783,76 @@ test('select_live_item exposes unresolved reasons in the public response', async
   }
 });
 
+test('select_live_item falls back to clicking a visible workspace row when the live item has no hint id', async () => {
+  const calls = [];
+  const clicks = [];
+  let snapshotCall = 0;
+  const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+  const state = {
+    pageState: { currentRole: 'workspace', workspaceSurface: 'list', graspConfidence: 'high', riskGateDetected: false },
+    handoff: { state: 'idle' },
+  };
+  const page = {
+    title: async () => 'BOSS直聘',
+    url: () => 'https://www.zhipin.com/web/geek/chat?id=1',
+    evaluate: async () => ({ x: 120, y: 260 }),
+    mouse: {
+      click: async (x, y) => {
+        clicks.push({ x, y });
+      },
+    },
+  };
+  const initialSnapshot = {
+    workspace_surface: 'list',
+    live_items: [{ label: '李女士', selected: false }],
+    active_item: { label: '全部', selected: true },
+    composer: null,
+    action_controls: [],
+    blocking_modals: [],
+    loading_shell: false,
+    summary: {
+      active_item_label: '全部',
+      draft_present: false,
+      loading_shell: false,
+      detail_alignment: 'unknown',
+      selection_window: 'visible',
+    },
+  };
+  const refreshedSnapshot = {
+    workspace_surface: 'thread',
+    live_items: [{ label: '李女士', selected: true }],
+    active_item: { label: '李女士', selected: true },
+    composer: { kind: 'chat_composer', draft_present: false },
+    action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+    blocking_modals: [],
+    loading_shell: false,
+    summary: {
+      active_item_label: '李女士',
+      draft_present: false,
+      loading_shell: false,
+      detail_alignment: 'aligned',
+      selection_window: 'visible',
+    },
+  };
+
+  registerWorkspaceTools(server, state, {
+    getActivePage: async () => page,
+    syncPageState: async () => undefined,
+    collectVisibleWorkspaceSnapshot: async () => {
+      snapshotCall += 1;
+      return snapshotCall === 1 ? initialSnapshot : refreshedSnapshot;
+    },
+  });
+
+  const result = await calls.find((entry) => entry.name === 'select_live_item').handler({ item: '李女士' });
+
+  assert.equal(clicks.length, 1);
+  assert.equal(result.meta.result.status, 'selected');
+  assert.deepEqual(result.meta.result.selected_item, { label: '李女士', selected: true });
+  assert.deepEqual(result.meta.result.active_item, { label: '李女士' });
+  assert.equal(result.meta.continuation.suggested_next_action, 'workspace_inspect');
+});
+
 test('draft_action exposes public-safe unresolved and failed responses', async () => {
   const cases = [
     {
