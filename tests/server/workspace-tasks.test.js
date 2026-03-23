@@ -26,11 +26,13 @@ test('summarizeWorkspaceSnapshot reports active item, draft state, and blockers'
     workspace_surface: 'thread',
     live_items: [{ label: '李女士', selected: true }],
     composer: { kind: 'chat_composer', draft_present: false },
-    blocking_modals: [],
+    blocking_modals: [{ label: '权限提示' }],
     loading_shell: false,
   });
 
   assert.equal(summary.active_item_label, '李女士');
   assert.equal(summary.draft_present, false);
   assert.equal(summary.loading_shell, false);
+  assert.equal(summary.blocking_modal_count, 1);
+  assert.deepEqual(summary.blocking_modal_labels, ['权限提示']);
 });

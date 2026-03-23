@@ -47,11 +47,7 @@ function getLoadingShell(snapshot) {
 }
 
 function isSelectedItem(item) {
-  return item?.selected === true
-    || item?.active === true
-    || item?.current === true
-    || item?.aria_selected === true
-    || item?.['aria-selected'] === true;
+  return item?.selected === true;
 }
 
 function hasThreadEvidence(snapshot) {
@@ -288,10 +284,16 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
 
     function isSelected(el) {
       return el.getAttribute('aria-selected') === 'true'
-        || el.getAttribute('aria-current') !== null
+        || el.getAttribute('data-selected') === 'true'
         || el.classList.contains('selected')
-        || el.classList.contains('active')
-        || el.classList.contains('current');
+        || el.classList.contains('is-selected')
+        || el.classList.contains('workspace-item--selected');
+    }
+
+    function isWorkspaceItemCandidate(el) {
+      if (!isVisible(el)) return false;
+      if (el.closest('button, a, [role="button"], input, textarea, select')) return false;
+      return el.matches('li, [role="option"], [role="row"], [role="treeitem"], [data-list-item], [data-thread-item], [data-conversation-item]');
     }
 
     function readLiveItem(el) {
@@ -370,8 +372,8 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
     }
 
     const bodyText = compactText(document.body?.innerText);
-    const live_items = [...document.querySelectorAll('[data-grasp-id], [role="option"], [role="row"], li, a, button')]
-      .filter(isVisible)
+    const live_items = [...document.querySelectorAll('li, [role="option"], [role="row"], [role="treeitem"], [data-list-item], [data-thread-item], [data-conversation-item]')]
+      .filter(isWorkspaceItemCandidate)
       .map(readLiveItem)
       .filter(Boolean)
       .filter((item, index, items) => {
